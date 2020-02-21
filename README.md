@@ -1,5 +1,7 @@
 # RESTfulDB
 
+## HINT: not full implemented
+
 typescript written offline first indexeddb wrapper.
 
 is able to sync with backend services by passing optional service implementation.
