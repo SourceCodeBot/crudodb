@@ -23,5 +23,5 @@ export interface StoreSchema {
    * callback which will triggered, if database version is not initialization version
    * @param db
    */
-  onUpgradeNeeded?: (db: IDBDatabase, event: IDBVersionChangeEvent & IDBOpenDBRequest) => Promise<boolean>;
+  onUpgradeNeeded?: (db: IDBDatabase, event: IDBVersionChangeEvent) => Promise<boolean>;
 }

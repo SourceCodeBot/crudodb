@@ -1,9 +1,8 @@
 {
   "extends": "../tsconfig.json",
   "compilerOptions": {
-    "allowJs": true,
     "outDir": "out/spec",
-    "module": "commonjs",
+    "module": "esnext",
     "baseUrl": "",
     "types": ["jest", "node"],
 	"lib": ["dom", "esnext"],

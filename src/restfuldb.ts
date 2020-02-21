@@ -87,7 +87,7 @@ class RestfulDB {
     );
   }
 
-  public update<T>(schemaKey: string, item: T): Promise<T> {
+  public update<T>(schemaKey: string, item: T): Promise<T|undefined> {
 	  return execDatabase(
 	    schemaKey,
       this.databases[schemaKey],
@@ -95,7 +95,15 @@ class RestfulDB {
     );
   }
 
-  public registerDatabase<T>(schema: StoreSchema, schemaKey?: string, api?: CrudApi<T>): string {
+  public registerDatabase<T>({
+		schema,
+		schemaKey,
+		api
+  	} : {
+	  schema: StoreSchema,
+	  api?: CrudApi<T>,
+	  schemaKey?: string
+  }): string {
     const key = schemaKey || generateTempKey(schema);
     const schemas = Object.values(this.databases).map((db) => db.schema);
     const schemaMap = groupVersions([...schemas, schema]);
@@ -158,8 +166,8 @@ function execDatabase<T, S>(schemaKey: string, database: Database<unknown> | und
   return database ? callback(database as Database<T>) : Promise.reject(`${schemaKey} does not exists`);
 }
 
-function generateTempKey(schema: StoreSchema): string {
-  return `custom_schema:${schema.dbName}:${schema.store}`;
+function generateTempKey({dbName, store}: StoreSchema): string {
+  return `custom_schema:${dbName}:${store}`;
 }
 
 function groupVersions(databases: StoreSchema[]): Record<string, number> {
@@ -171,5 +179,5 @@ function groupVersions(databases: StoreSchema[]): Record<string, number> {
       acc[dbName] = dbVersion;
     }
     return acc;
-  }, {});
+  }, {} as Record<string, number>);
 }
