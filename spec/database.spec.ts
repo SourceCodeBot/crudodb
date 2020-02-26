@@ -1,4 +1,4 @@
-import {StoreSchema} from "../src/models";
+import {StoreSchema} from "../src/store-schema";
 import {Database} from "../src/database";
 
 describe('#database', () => {
@@ -20,12 +20,19 @@ describe('#database', () => {
 	};
 
 	beforeEach(async (done) => {
-		await new Promise((resolve) => {
+		const tx = await new Promise<IDBDatabase>((resolve) => {
 			const req = indexedDB.deleteDatabase('jest');
-			req.onsuccess = () =>resolve();
-			req.onerror = () =>resolve();
-			req.onupgradeneeded = () => resolve();
+			if (req.transaction) {
+				req.transaction.oncomplete = () => resolve(req.result);
+			} else {
+				req.onsuccess = () => resolve(req.result);
+				req.onerror = () =>resolve(req.result);
+				req.onupgradeneeded = () => resolve(req.result);
+			}
 		});
+		if (tx) {
+			tx.close();
+		}
 		done();
 	});
 
@@ -36,7 +43,6 @@ describe('#database', () => {
 
 			expect(await db.awaitInitialized()).toEqual(true);
 			expect(db.store).not.toBeUndefined();
-			db.store!.close();
 		});
 
 		it('should reinitialize successfully', async () => {
@@ -51,7 +57,6 @@ describe('#database', () => {
 			await db.awaitInitialized();
 
 			expect(onUpgradeNeeded).not.toHaveBeenCalled();
-			db.store!.close();
 		});
 	});
 
@@ -60,12 +65,15 @@ describe('#database', () => {
 		it('should create item successfully', async () => {
 			await setupDatabase(schema);
 			const db = new Database<Demo>('demo', schema);
-			await db.awaitInitialized();
+			expect(await db.awaitInitialized()).toEqual(true);
 			const created = new Date();
 			const result = await db.create({
 				id: 1,
 				created,
 				title: 'created'
+			});
+			console.log('created', {
+				store: (db as any)._store._rawDatabase.connections
 			});
 			expect(result).not.toBeUndefined();
 			expect(result).toEqual({
@@ -80,7 +88,7 @@ describe('#database', () => {
 });
 
 async function setupDatabase(schema: StoreSchema): Promise<void> {
-	return new Promise<IDBDatabase>((resolve, reject) => {
+	await new Promise<IDBDatabase>((resolve, reject) => {
 		const {dbVersion, dbName, indices, keyPath = 'id', store} = schema;
 		const req = indexedDB.open(dbName, dbVersion);
 		req.onupgradeneeded = () => {
@@ -92,5 +100,8 @@ async function setupDatabase(schema: StoreSchema): Promise<void> {
 		};
 		req.onsuccess = () => resolve(req.result);
 		req.onerror = reject;
-	}).then((db: IDBDatabase) => db.close());
+		if (req.transaction) {
+			req.transaction!.oncomplete = () => req.result.close();
+		}
+	});
 }

@@ -1,47 +1,6 @@
-import {IndexedKey, StoreSchema} from "./models";
-import {isNotDeleted, isOnlineSupport} from "./utils";
-
-export interface CrudApi<T> {
-	/**
-	 * that function should be able to persist an new entity and return it.
-	 * otherwise undefined.
-	 * @note do not throw errors! there is no error handler. separation of concern!
-	 * @param obj
-	 */
-	create(obj: T): Promise<T | undefined>;
-
-	/**
-	 * that function should be able to update an existing entity and return it.
-	 * otherwise undefined.
-	 * @note do not throw errors! there is no error handler. separation of concern!
-	 * @param obj
-	 */
-	update(obj: T): Promise<T | undefined>;
-
-	/**
-	 * that function should be able to remove an existing entity and return successfully or not.
-	 * @note do not throw errors! there is no error handler. separation of concern!
-	 * @param obj
-	 */
-	delete(obj: T): Promise<boolean>;
-
-	/**
-	 * that function should be able to find and return an existing entity or undefined.
-	 * @note do not throw errors! there is no error handler. separation of concern!
-	 * @param id
-	 */
-	get(id: IndexedKey): Promise<T | undefined>;
-
-	/**
-	 * that function should be able to return a list of all existing entities or an empty array of that type.
-	 * @note do not throw errors! there is no error handler. separation of concern!
-	 */
-	gets(): Promise<T[]>;
-}
-
-export interface CheckApiOnline {
-	isOnline: () => Promise<boolean>;
-}
+import {IndexedKey, StoreSchema} from "./store-schema";
+import {isDeleted, isOnlineSupport} from "./utils";
+import {CrudApi} from "./crud-api";
 
 /**
  * TODO: await running transactions
@@ -62,10 +21,17 @@ export class Database<T> {
 
 	private _store: IDBDatabase | undefined;
 
+	/**
+	 *
+	 */
 	public get store(): IDBDatabase | undefined {
 		return this._store;
 	}
 
+	/**
+	 *
+	 * @param db
+	 */
 	public set store(db: IDBDatabase | undefined) {
 		this._store = db;
 	}
@@ -78,83 +44,91 @@ export class Database<T> {
 		return new Promise<IDBDatabase>((resolve, reject) => {
 			const {dbName, dbVersion} = this.schema;
 			const request = indexedDB.open(dbName, dbVersion);
-			request.onsuccess = () => resolve(request.result);
-
-			request.onerror = () => reject(request.result);
-
 			request.onupgradeneeded = (evt) => this.onUpgradeNeeded(evt, this.schema)
 				.then(() => resolve(request.result));
+			if (request.transaction) {
+				request.transaction.oncomplete = () => {
+					resolve(request.result);
+				};
+			} else {
+				request.onsuccess = () => resolve(request.result);
+				request.onerror = () => reject();
+			}
 		});
 	}
 
 	public sync(): Promise<void> {
-		return new Promise((resolve, reject) => {
-			const db = this.store;
-			if (!db) {
-				reject('no database connection');
-				return;
-			}
-			const {store} = this.schema;
-			const request = db
-				.transaction(store, 'readwrite')
-				.objectStore(store)
-				.index('flag')
-				.getAll();
-
-			request.onerror = reject;
-			request.onsuccess = async () => {
-				await Promise.all(request.result.map((item: T & { flag: string }): Promise<any> => {
-					switch (item.flag) {
-						case 'D':
-							return this.getId(item, (id: IndexedKey) => this.deleteRemote(id, item));
-						case 'C':
-							return this.createRemote(item);
-						case 'U':
-							return this.updateRemote(item);
-						default:
-							console.warn('undefined flag', item.flag);
-							return Promise.resolve();
-					}
-				}));
-				const isOnline = isOnlineSupport(this.api) ? await this.api.isOnline() : undefined;
-				if (this.api && (isOnline === undefined || isOnline)) {
-					await this.api.gets()
-						.then((fromRemote) => this.updateLocalStorage(fromRemote))
-						.catch((err) => console.error(`${this.key} sync failed with api`, err));
+		type K = T & {flag?: string};
+		return new Promise(async (done, _) => {
+			const {_store: store, schema} = this;
+			const action = runAction<K[]>({
+				store,
+				schema,
+				mode: 'readonly',
+				routine: (_store: IDBObjectStore) => new Promise<K[]>((resolve, reject) => {
+					const req = _store.index('flag').getAll();
+					req.onsuccess = () => resolve(req.result as K[]);
+					req.onerror = () => reject();
+				})
+			});
+			const actions = (await action).map((item: K): Promise<any> => {
+				switch (item.flag) {
+					case 'D':
+						return this.getId(item, (id: IndexedKey) => this.deleteRemote(id, item));
+					case 'C':
+						return this.createRemote(item);
+					case 'U':
+						return this.updateRemote(item);
+					default:
+						console.warn('undefined flag', item.flag);
+						return Promise.resolve();
 				}
-				resolve();
-			};
+			});
+			await Promise.all(actions);
+			const isOnline = isOnlineSupport(this.api) ? await this.api.isOnline() : undefined;
+			if (this.api && (isOnline === undefined || isOnline)) {
+				await this.api.getAll()
+					.then((fromRemote) => this.updateLocalStorage(fromRemote))
+					.catch((err) => console.error(`${this.key} sync failed with api`, err));
+			}
+			done();
 		});
 	}
 
+	/**
+	 *
+	 * @param id
+	 */
 	public get(id: IndexedKey): Promise<T | undefined> {
-		if (!this.store) {
-			return Promise.reject('no database connection');
-		}
-		const {store} = this.schema;
-		const request = this.store
-			.transaction(store, 'readonly')
-			.objectStore(store)
-			.index('flag')
-			.get(id);
-		return new Promise((resolve, reject) => {
-			request.onerror = (err) => reject(err);
-			request.onsuccess = () => resolve(isNotDeleted(request.result) ? request.result as T : undefined);
+		const {_store: store, schema} = this;
+		return runAction<T | undefined>({
+			store,
+			schema,
+			mode: 'readonly',
+			routine: (_store) => new Promise((resolve, reject) => {
+				const request = _store.index('flag').get(id);
+				request.onerror = (err) => reject(err);
+				request.onsuccess = () => resolve(isDeleted(request.result) ? undefined : request.result as T);
+			})
 		});
 	}
 
 	public getAll(): Promise<T[]> {
-		if (!this.store) {
-			return Promise.reject('no database connection');
-		}
-		const {store} = this.schema;
-		const request = this.store
-			.transaction([store], 'readonly')
-			.objectStore(store)
-			.getAll();
-		return new Promise((resolve, reject) => {
-			request.onsuccess = () => resolve(request.result.filter(isNotDeleted) as T[]);
-			request.onerror = (err) => reject(err);
+		const {_store: store, schema} = this;
+		return runAction<T[]>({
+			store,
+			schema,
+			mode: 'readonly',
+			routine: (store) => new Promise<T[]>((resolve) => {
+				const req = store.getAll();
+				req.onsuccess = () => {
+					if (req.transaction) {
+						req.transaction.oncomplete = () => resolve(req.result.filter((item) => !isDeleted(item)) as T[]);
+					} else {
+						resolve(req.result.filter((item) => !isDeleted(item)) as T[]);
+					}
+				};
+			})
 		});
 	}
 
@@ -163,9 +137,8 @@ export class Database<T> {
 	 * @param item
 	 */
 	public create(item: T): Promise<T | undefined> {
-		return this.createLocal(item).then(() => {
-			return this.createRemote(item);
-		});
+		return this.createLocal(item)
+			.then(() => this.createRemote(item));
 	}
 
 	/**
@@ -213,9 +186,9 @@ export class Database<T> {
 			objectStore.createIndex('flag', 'flag', {unique: false});
 			await new Promise(((resolve, reject) => {
 				objectStore.transaction.oncomplete = () => resolve();
-				objectStore.transaction.onerror = reject;
-				objectStore.transaction.onabort = reject;
-			}));
+				objectStore.transaction.onerror = () => reject();
+				objectStore.transaction.onabort = () => reject();
+			})).then(() => db.close());
 		} else if (schema.onUpgradeNeeded) {
 			await schema.onUpgradeNeeded(db, evt);
 		}
@@ -226,7 +199,6 @@ export class Database<T> {
 	 *     INTERNAL SECTION      *
 	 *                           *
 	 *****************************/
-
 
 	private async updateLocalStorage(fromRemote: T[]): Promise<void> {
 		const fromLocal = await this.getAll();
@@ -250,7 +222,14 @@ export class Database<T> {
 
 	private async createLocal(item: T, addFlag: boolean = true): Promise<T | undefined> {
 		const localItem: T & { flag?: string } = {...item, flag: addFlag ? 'C' : undefined};
-		return this.updateInternalEntry(localItem, 'create', (store) => store.add(localItem));
+		const {_store: store, schema} = this;
+		return runAction<T | undefined>({
+			store,
+			schema,
+			mode: 'readwrite',
+			routine: (_store) =>
+				usingDatabase(store, () => handleRequest(_store.add(localItem), localItem))
+		});
 	}
 
 	private async createRemote(item: T): Promise<T | undefined> {
@@ -259,7 +238,7 @@ export class Database<T> {
 		}
 		const isOnline = isOnlineSupport(this.api) ? await this.api.isOnline() : undefined;
 		if (isOnline === undefined || isOnline) {
-			return this.api.create(item).then(async (result: T | undefined) => {
+			return await this.api.create(item).then(async (result: T | undefined) => {
 				const deleted = await this.getId(item, (id: IndexedKey) => this.deleteLocal(id, item)).catch(() => false);
 				return deleted && result ? this.createLocal(result, false) : undefined;
 			}).catch((err) => {
@@ -272,7 +251,14 @@ export class Database<T> {
 
 	private updateLocal(item: T, addFlag: boolean = true): Promise<T | undefined> {
 		const localItem: T & { flag?: string } = {...item, flag: addFlag ? 'U' : undefined};
-		return this.updateInternalEntry(localItem, 'update', (store) => store.put(item));
+		const {_store: store, schema} = this;
+		return runAction<T | undefined>({
+			store,
+			schema,
+			mode: 'readwrite',
+			routine: (_store) =>
+				usingDatabase(store, () => handleRequest(_store.put(localItem), localItem))
+		});
 	}
 
 	private async updateRemote(item: T): Promise<T | undefined> {
@@ -293,36 +279,26 @@ export class Database<T> {
 	}
 
 	private deleteLocal(id: IndexedKey, item: T, addFlag: boolean = true): Promise<boolean> {
+		const {_store: store, schema} = this;
 		if (!addFlag) {
-			return this.updateInternalEntry(item, 'delete', (store) => store.delete(id))
-				.then(() => true)
-				.catch(() => false);
+			return runAction({
+				schema,
+				store,
+				mode: 'readwrite',
+				routine: (_store) =>
+					usingDatabase(store, () => handleRequest(_store.delete(id), item)
+							.then(() => true)
+							.catch(() => false))
+			});
 		}
 		const localItem: T & { flag?: string } = {...item, flag: 'D'};
-
-		return this.updateInternalEntry(localItem, 'delete', (store) => store.put(localItem))
-			.then((result) => result === undefined);
-	}
-
-	private updateInternalEntry<S>(
-		localItem: T & { flag?: string },
-		routine: string,
-		storeRoutine: (store: IDBObjectStore) => IDBRequest<S>
-	): Promise<T | undefined> {
-		if (!this.store) {
-			return Promise.reject('no database');
-		}
-		const {store} = this.schema;
-		const request = storeRoutine(
-			this.store
-				.transaction([store], 'readwrite')
-				.objectStore(store)
-		);
-		return handleRequest(request, localItem)
-			.catch((err) => {
-				console.error(`cant ${routine} local entry`, err);
-				return localItem;
-			});
+		return runAction<boolean>({
+			store,
+			schema,
+			mode: 'readwrite',
+			routine: (_store) => handleRequest(_store.put(localItem), true)
+				.then(((res) => res === undefined ? true : res))
+		});
 	}
 
 	private async deleteRemote(id: IndexedKey, item: T): Promise<boolean> {
@@ -356,23 +332,18 @@ function buildEntityIdent({dbName, store}: { dbName: string, store: string }): s
 }
 
 function handleRequest<T, S>(request: IDBRequest<S>, item: T): Promise<T | undefined> {
-	return new Promise(resolve => {
+	return new Promise((resolve, reject) => {
 		try {
-			request.onsuccess = () => {
-				resolve(item);
-			};
-			request.onerror = evt => {
-				console.error('can not handle operation', {
-					evt,
-					item
-				});
-				resolve(undefined);
-			};
+			let result: T | undefined = undefined;
+			request.onsuccess = () => (result = item);
+			request.onerror = evt => console.error('can not handle operation', {evt, item});
+			request.transaction!.oncomplete = () => resolve(result);
 		} catch (error) {
 			console.error('can not handle request', {
 				item,
 				error
 			});
+			reject(error);
 		}
 	});
 }
@@ -391,4 +362,28 @@ function isIDBOpenRequest(object: any): object is IDBOpenDBRequest {
 
 function getValue<T, K extends keyof T>(obj: T, key: K): T[K] {
 	return obj[key];
+}
+
+function runAction<T>({store, schema, mode, routine}: {
+	store: IDBDatabase | undefined,
+	schema: StoreSchema,
+	mode: 'readonly' | 'readwrite',
+	routine: (objectStore: IDBObjectStore) => Promise<T>
+}): Promise<T> {
+	if (!store) {
+		console.trace({
+			store, schema, mode, routine
+		});
+		return Promise.reject('no database');
+	}
+	const {store: s} = schema;
+	const objectStore = store
+		.transaction([s], mode)
+		.objectStore(s);
+	return routine(objectStore)
+		.finally(() => store.close());
+}
+
+function usingDatabase<T>(store: IDBDatabase | undefined, call: () => Promise<T>): Promise<T> {
+	return call().finally(() => store?.close());
 }

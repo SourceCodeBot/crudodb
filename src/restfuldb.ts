@@ -1,7 +1,8 @@
 import { Observable, Subject } from "rxjs";
 import { shareReplay, take } from "rxjs/operators";
-import { IndexedKey, StoreSchema } from "./models";
-import { CrudApi, Database } from "./database";
+import { IndexedKey, StoreSchema } from "./store-schema";
+import { Database } from "./database";
+import {CrudApi} from "./crud-api";
 
 interface InternalStoreEntry extends StoreSchema {
   id: string;
