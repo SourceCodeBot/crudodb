@@ -56,8 +56,18 @@ how to be updated?
 
 1. take all local items and process there flags
 
-
 ## implementation status
 
-- [ ] Database
+- [X] Database
+    - [X] Create
+    - [X] Delete
+    - [X] Get
+    - [X] GetAll
+    - [X] Update
+    - [X] Sync
 - [ ] CrudoDb
+    - [ ] register new schema
+    - [ ] register existing schema
+    - [ ] register existing schema with update
+    - [ ] delegate requests to databases
+    - [ ] handle schemaKeys

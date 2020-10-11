@@ -2,7 +2,6 @@ import {
   createMapOfDbNameAndVersion,
   detectVersionForDatabase,
   execDatabase,
-  findTransaction,
   generateTempKey,
   getSchemaStatusInDatabase,
   isDeleted,
@@ -153,75 +152,3 @@ describe('#getSchemaStatusInDatabase', () => {
     expect(getSchemaStatusInDatabase(schema)).toEqual('initial');
   });
 });
-
-describe('#findTransaction', () => {
-  it('should find no transaction in', () => {
-    expect(findTransaction([], 'unknown')).toBeUndefined();
-  });
-
-  it('should find transaction in', async () => {
-    const apply = (store: string) => {
-      return (db: IDBDatabase) =>
-        new Promise<IDBDatabase>(resolve => {
-          db.createObjectStore(store);
-          resolve(db);
-        });
-    };
-    const transactions = await Promise.all([
-      openTransaction({
-        name: 'a',
-        mode: 'readonly',
-        onUpgradeNeeded: apply('stores'),
-        stores: ['stores']
-      }),
-      openTransaction({
-        name: 'b',
-        mode: 'readonly',
-        onUpgradeNeeded: apply('store'),
-        stores: ['store']
-      })
-    ]);
-    expect(findTransaction(transactions, 'store')).toBeUndefined();
-    try {
-      transactions.forEach(tx => tx.db.close());
-    } catch (e) {
-      console.error({ e });
-    }
-  });
-});
-
-interface OpenDBArgs {
-  name: string;
-  onUpgradeNeeded: (db: IDBDatabase) => Promise<IDBDatabase>;
-  version?: number;
-}
-
-interface OpenTransactionArgs extends OpenDBArgs {
-  stores: string[];
-  mode?: IDBTransactionMode;
-}
-
-function openDB(args: OpenDBArgs): Promise<IDBDatabase> {
-  const { name, onUpgradeNeeded, version } = args;
-  return new Promise((resolve, reject) => {
-    const request = indexedDB.open(name, version);
-    request.onupgradeneeded = () =>
-      onUpgradeNeeded(request.result)
-        .then(db => resolve(db))
-        .catch(reject);
-    request.onsuccess = () => resolve(request.result);
-    request.onblocked = reject;
-    request.onerror = reject;
-  });
-}
-
-function openTransaction(args: OpenTransactionArgs): Promise<IDBTransaction> {
-  return new Promise((resolve, reject) => {
-    openDB(args)
-      .then(db => {
-        const { stores, mode } = args;
-        resolve(db.transaction(stores, mode));
-      })
-      .catch(reject);
-  });
-}

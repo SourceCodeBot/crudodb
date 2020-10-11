@@ -1,4 +1,4 @@
-import { IndexedKey, InternalStoreEntry, StoreSchema } from './store-schema';
+import { InternalStoreEntry, StoreSchema } from './store-schema';
 import { Database } from './database';
 import { CrudApi } from './crud-api';
 import {
@@ -40,7 +40,7 @@ export class CrudoDb {
   /**
    * dbName -> IndexedDb instance
    */
-  private idbDatabases: Record<string, IDBDatabase> = {};
+  // private idbDatabases: Record<string, IDBDatabase> = {};
 
   /**
    * schemaKey -> Store instance
@@ -49,9 +49,9 @@ export class CrudoDb {
 
   private constructor(private debug: boolean = false) {}
 
-  public async get<T>(
+  public async get<T, K extends keyof T>(
     schemaKey: string,
-    id: IndexedKey
+    id: T[K]
   ): Promise<T | undefined> {
     return execDatabase(
       schemaKey,
@@ -169,7 +169,8 @@ export class CrudoDb {
   private async setup(): Promise<void> {
     const start = +new Date();
     // setup internal database
-    this.databases.general = await initGeneralDb();
+    const general = await initGeneralDb()
+    this.databases.general = general as Database<unknown>;
     if (this.debug) {
       console.debug('synced databases', {
         took: +new Date() - start,

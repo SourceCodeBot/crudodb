@@ -84,7 +84,7 @@ export async function prepareStoreAndOpenTransactionWithDatabase(
   });
 }
 
-export async function initGeneralDb(): Promise<Database<unknown>> {
+export async function initGeneralDb(): Promise<Database<InternalStoreEntry>> {
   const db = await prepareStoreAndOpenTransactionWithDatabase(SCHEMA);
   return new Database<InternalStoreEntry>(
     db.transaction(SCHEMA.store,'readwrite').objectStore(SCHEMA.store),

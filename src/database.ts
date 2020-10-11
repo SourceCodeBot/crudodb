@@ -2,15 +2,6 @@ import { IndexedKey, StoreIndex, StoreSchema } from './store-schema';
 import { isDeleted, isOnlineSupport } from './utils';
 import { CrudApi } from './crud-api';
 
-function schemaConform<T, K extends keyof T>(
-  item: T,
-  indices: StoreIndex[]
-): T {
-  const keys: K[] = indices.map(({ name }) => name as K);
-  const entries: [K, T[K]][] = keys.map(key => [key, item[key as K]]);
-  return Object.fromEntries(entries) as unknown as T;
-}
-
 type WithFlag<T> = T & { flag?: string };
 
 export class Database<T> {
@@ -19,25 +10,33 @@ export class Database<T> {
     private objectStore: IDBObjectStore,
     private key: string,
     private schema: StoreSchema,
-    private api?: CrudApi<T>,
-    private debug: boolean = false
+    private api?: CrudApi<T>
   ) {}
 
-
+  /**
+   * push local transactions to remote and try to fetch updates from remote
+   */
   public sync(): Promise<void> {
-    type K = WithFlag<T>;
+    type F = WithFlag<T>;
     return new Promise(async (done, _) => {
-      const action = new Promise<K[]>((resolve, reject) => {
+      const isOnline = this.api && isOnlineSupport(this.api)
+        ? await this.api.isOnline()
+        : undefined;
+      if (isOnline === false) {
+        done();
+        return;
+      }
+      const localItems = new Promise<F[]>((resolve, reject) => {
         this.prepareTransaction();
         const req = this.objectStore.index('flag').getAll();
-        req.onsuccess = () => resolve(req.result as K[]);
+        req.onsuccess = () => resolve(req.result as F[]);
         req.onerror = () => reject();
       });
-      const actions = (await action).map(
-        (item: K): Promise<unknown> => {
+      const actions = (await localItems).map(
+        (item: F): Promise<unknown> => {
           switch (item.flag) {
             case 'D':
-              return this.getId(item, (id: IndexedKey) =>
+              return this.getId(item, (id: T[keyof T]) =>
                 this.deleteRemote(id, item)
               );
             case 'C':
@@ -50,47 +49,58 @@ export class Database<T> {
         }
       );
       await Promise.all(actions);
-      const isOnline = isOnlineSupport(this.api)
-        ? await this.api.isOnline()
-        : undefined;
       if (this.api && (isOnline === undefined || isOnline)) {
         await this.api
           .getAll()
           .then(fromRemote => this.updateLocalStorage(fromRemote))
-          .catch((err) => console.error(`${this.key} sync failed with api`, err));
+          .catch((err) => console.error(`${this.key} sync failed with api`, err)); // TODO: write test
       }
       done();
     });
   }
 
-  /**
-   *
-   * @param id
-   */
-  public get(id: IndexedKey): Promise<T | undefined> {
+  public get(id: T[keyof T]): Promise<T | undefined> {
     return new Promise((resolve, reject) => {
       this.prepareTransaction();
-      const request = this.objectStore.get(id);
+      const request = this.objectStore.get(id as unknown as IndexedKey);
       request.onerror = err => reject(err);
-      request.onsuccess = () =>
-        resolve(!request.result || isDeleted(request.result)
-            ? undefined
-            : (request.result as T)
-        );
+      request.onsuccess = async () => {
+        const result = request.result;
+        if (!result && this.api) {
+          const isOnline = isOnlineSupport(this.api)
+            ? await this.api.isOnline()
+            : undefined;
+          if (isOnline === undefined || isOnline) {
+            await this.api.get(id)
+              .then((response) => resolve(response))
+              .catch((e) => reject(e));
+            return;
+          }
+        }
+        resolve(!result || isDeleted(result) ? undefined : (result as T));
+      };
     });
   }
 
   public getAll(): Promise<T[]> {
-    return new Promise<T[]>(resolve => {
+    return new Promise<T[]>((resolve, reject) => {
       this.prepareTransaction();
-      const req = this.objectStore.getAll();
-      req.onsuccess = () => {
-        if (req.transaction) {
-          req.transaction.oncomplete = () =>
-            resolve(req.result.filter(item => !isDeleted(item)) as T[]);
-        } else {
-          resolve(req.result.filter(item => !isDeleted(item)) as T[]);
+      const request = this.objectStore.getAll();
+      request.onsuccess = async () => {
+        const result = request.result;
+        if (result?.length < 1 && this.api) {
+          const isOnline = isOnlineSupport(this.api)
+            ? await this.api.isOnline()
+            : undefined;
+          if (isOnline === undefined || isOnline) {
+            await this.api.getAll()
+              .then((response) => resolve(response))
+              .catch((e) => reject(e));
+            return;
+          }
         }
+        resolve(request.result.filter(item => !isDeleted(item)) as T[]);
+
       };
     });
   }
@@ -101,18 +111,8 @@ export class Database<T> {
    */
   public create(item: T): Promise<T | undefined> {
     return this.createLocal(item)
-      .catch((error) => {
-        if (this.debug) {
-          console.error({error});
-        }
-        return undefined;
-      })
-      .then((entity) => entity && this.createRemote(item).catch((error) => {
-        if (this.debug) {
-          console.error({error});
-        }
-        return entity;
-    }));
+      .catch(() => undefined)
+      .then((entity) => entity && this.createRemote(item).catch(() => entity));
   }
 
   /**
@@ -120,7 +120,9 @@ export class Database<T> {
    * @param item
    */
   public update(item: T): Promise<T | undefined> {
-    return this.updateLocal(item).then(() => this.updateRemote(item));
+    return this.updateLocal(item)
+      .catch(() => undefined) // TODO: write test
+      .then((entity) => entity && this.updateRemote(entity).catch(() => entity));
   }
 
   /**
@@ -128,15 +130,10 @@ export class Database<T> {
    * @param item
    */
   public delete(item: T): Promise<boolean> {
-    return this.getId(item, (id: IndexedKey) =>
+    return this.getId(item, (id: T[keyof T]) =>
       this.deleteLocal(id, item)
         .then((result) => result && this.deleteRemote(id, item))
-    ).catch((e) => {
-      if (this.debug) {
-        console.error('error occurred on deletion', {e});
-      }
-      return false;
-    });
+    ).catch(() => false); // TODO: write test
   }
 
   /*****************************
@@ -149,23 +146,29 @@ export class Database<T> {
     const fromLocal = await this.getAll();
     const { keyPath = 'id' } = this.schema;
 
+    const idFn = (item: T) => getValue(item, keyPath as keyof T);
+
     const localIds = extractIdsList(fromLocal, keyPath);
     const remoteIds = extractIdsList(fromRemote, keyPath);
 
     const createLocal = fromRemote.filter(
-      item => !localIds.includes(getValue(item, keyPath as keyof T))
+      item => !localIds.includes(idFn(item))
     );
     const deleteLocal = fromLocal.filter(
-      item => !remoteIds.includes(getValue(item, keyPath as keyof T))
+      item => !remoteIds.includes(idFn(item))
     );
-    const updateLocal = fromLocal.filter(item => !deleteLocal.includes(item));
+    const deleteLocalIds = deleteLocal.map(idFn);
+
+    const updateLocal = fromRemote.filter(
+      (item) => localIds.includes(idFn(item)) && !deleteLocalIds.includes(idFn(item))
+    );
 
     createLocal.forEach(item =>
       this.createLocal(item, false).catch(err => logInfo(item, err))
     );
     deleteLocal.forEach(item =>
       this.getId(item, id => this.deleteLocal(id, item, false)).catch(err =>
-        logInfo(item, err)
+        logInfo(item, err) // TODO: write test
       )
     );
     updateLocal.forEach(item =>
@@ -194,16 +197,16 @@ export class Database<T> {
       : undefined;
     if (isOnline === undefined || isOnline) {
       return await this.api
-        .create(item)
+        .create(schemaConform(item, this.schema.indices))
         .then(async (result: T | undefined) => {
-          const deleted = await this.getId(item, (id: IndexedKey) =>
-            this.deleteLocal(id, item, false)
-          ).catch(() => false);
+          const deleted = await this.getId(item,
+            (id: T[keyof T]) => this.deleteLocal(id, item, false)
+          ).catch(() => false); // TODO: write test
           return deleted && result
             ? this.createLocal(result, false)
             : undefined;
         })
-        .catch(err => {
+        .catch(err => { // TODO: write test
           console.error(
             `can't call create of api ${buildEntityIdent(this.schema)}`,
             err
@@ -218,12 +221,13 @@ export class Database<T> {
     item: T,
     addFlag: boolean = true
   ): Promise<T | undefined> {
+    const entity = await this.getId(item, (id) => this.get(id));
     const localItem: T & { flag: string } = {
       ...schemaConform(item, this.schema.indices),
-      flag: addFlag ? 'U' : ''
+      flag: addFlag ? evaluateUpdateFlag(entity) : ''
     };
     this.prepareTransaction();
-    return handleRequest(this.objectStore.put(localItem), localItem);
+    return entity && await handleRequest(this.objectStore.put(localItem), localItem);
   }
 
   private async updateRemote(item: T): Promise<T | undefined> {
@@ -236,14 +240,7 @@ export class Database<T> {
     if (isOnline === undefined || isOnline) {
       return this.api
         .update(item)
-        .then(async (result: T | undefined) => {
-          const deleted = await this.getId(item, (id: IndexedKey) =>
-            this.deleteLocal(id, item)
-          ).catch(() => false);
-          return deleted && result
-            ? this.createLocal(result, false)
-            : undefined;
-        })
+        .then(async (result: T | undefined) => result && await this.updateLocal(result, false))
         .catch(err => {
           console.error(
             `can't call update of api ${buildEntityIdent(this.schema)}`,
@@ -256,23 +253,17 @@ export class Database<T> {
   }
 
   private async deleteLocal(
-    id: IndexedKey,
+    id: T[keyof T],
     item: T,
     addFlag: boolean = true
   ): Promise<boolean> {
     this.prepareTransaction();
     if (!addFlag) {
-      return handleRequest(this.objectStore.delete(id), item)
+      return handleRequest(this.objectStore.delete(id as unknown as IndexedKey), item)
         .then(() => true)
-        .catch((error) => {
-          if (this.debug) {
-            console.error({error});
-          }
-          return false;
-        });
+        .catch(() => false); // TODO: write test
     }
-
-    return this.get(id)
+    return this.get(id as unknown as T[keyof T])
       .then((entity) => entity && handleRequest(this.objectStore.put({
         ...entity,
         flag: 'D'
@@ -281,7 +272,7 @@ export class Database<T> {
       .then((res) => res === undefined ? false : res);
   }
 
-  private async deleteRemote(id: IndexedKey, item: T): Promise<boolean> {
+  private async deleteRemote(id: T[keyof T], item: T): Promise<boolean> {
     if (!this.api) {
       return true;
     }
@@ -291,9 +282,9 @@ export class Database<T> {
     if (isOnline === undefined || isOnline) {
       return this.api
         .delete(item)
-        .then(async (deleted: boolean) => {
-          return deleted && (await this.deleteLocal(id, item, false));
-        })
+        .then(async (deleted: boolean) =>
+          deleted && (await this.deleteLocal(id, item, false))
+        )
         .catch(err => {
           console.error(
             `can't call delete of api ${buildEntityIdent(this.schema)}`,
@@ -307,14 +298,13 @@ export class Database<T> {
 
   private getId<S>(
     item: T,
-    callback: (id: IndexedKey) => Promise<S>
+    callback: (id: T[keyof T]) => Promise<S>
   ): Promise<S> {
     const { keyPath = 'id' } = this.schema;
     if (!(item as any).hasOwnProperty(keyPath)) {
       return Promise.reject();
     }
-    const id: IndexedKey = getValue(item, keyPath as keyof T) as any;
-    return callback(id);
+    return callback(getValue(item, keyPath as keyof T));
   }
 
   public updateStore(objectStore: IDBObjectStore): void {
@@ -344,14 +334,17 @@ function handleRequest<T, S>(
     try {
       let result: T | undefined = undefined;
       request.onsuccess = () => (result = item);
-      request.onerror = evt => console.error('can not handle operation', { evt, item });
+      request.onerror = evt => {
+        console.error('can not handle operation', { evt, item }); // TODO: write test
+        throw new Error(evt.type);
+      };
       request.transaction!.oncomplete = () => resolve(result);
     } catch (error) {
       console.error('can not handle request', {
         item,
         error
       });
-      reject(error);
+      reject(error); // TODO: write test
     }
   });
 }
@@ -374,4 +367,17 @@ function renewStore(objectStore: IDBObjectStore): IDBObjectStore {
   const db = objectStore.transaction.db;
   return db.transaction(objectStore.name, 'readwrite')
     .objectStore(objectStore.name);
+}
+
+function evaluateUpdateFlag(entity?: any): string {
+  return entity && entity.flag === 'C' ? 'C' : 'U';
+}
+
+function schemaConform<T, K extends keyof T>(
+  item: T,
+  indices: StoreIndex[]
+): T {
+  const keys: K[] = indices.map(({ name }) => name as K);
+  const entries: [K, T[K]][] = keys.map(key => [key, item[key as K]]);
+  return Object.fromEntries(entries) as unknown as T;
 }

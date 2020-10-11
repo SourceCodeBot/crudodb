@@ -1,4 +1,3 @@
-import { IndexedKey } from './store-schema';
 
 export interface CrudApi<T> {
   /**
@@ -29,7 +28,7 @@ export interface CrudApi<T> {
    * @note do not throw errors! there is no error handler. separation of concern!
    * @param id
    */
-  get(id: IndexedKey): Promise<T | undefined>;
+  get<K extends keyof T>(id: T[K]): Promise<T | undefined>;
 
   /**
    * that function should be able to return a list of all existing entities or an empty array of that type.
