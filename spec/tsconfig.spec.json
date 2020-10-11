@@ -5,8 +5,8 @@
     "module": "esnext",
     "baseUrl": "",
     "types": ["jest", "node"],
-	"lib": ["dom", "esnext"],
-	"target": "esnext"
+    "lib": ["dom", "esnext"],
+    "target": "esnext"
   },
   "include": ["./*.spec.ts"]
 }

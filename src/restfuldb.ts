@@ -1,184 +1,182 @@
-import { Observable, Subject } from "rxjs";
-import { shareReplay, take } from "rxjs/operators";
-import { IndexedKey, StoreSchema } from "./store-schema";
-import { Database } from "./database";
-import {CrudApi} from "./crud-api";
+import { IndexedKey, InternalStoreEntry, StoreSchema } from './store-schema';
+import { Database } from './database';
+import { CrudApi } from './crud-api';
+import {
+  execDatabase,
+  generateTempKey,
+  getSchemaStatusInDatabase,
+  initGeneralDb,
+  reduceDbNameToVersion
+} from './utils';
 
-interface InternalStoreEntry extends StoreSchema {
-  id: string;
-  // version of database for StoreSchema#dbVersion
-  indexedIn: number;
+interface RegisterSchemaArgs<T> {
+  schema: StoreSchema;
+  api?: CrudApi<T>;
+  schemaKey?: string;
 }
 
-const SCHEMA: StoreSchema = {
-  indices: [
-    { name: 'id' },
-    { name: 'dbVersion' },
-    { name: 'indexedVersion' }
-  ],
-  dbVersion: 1,
-  dbName: 'internal',
-  store: 'stores'
-};
+export class CrudoDb {
+  static async setup(debug: boolean): Promise<CrudoDb> {
+    const rest = new CrudoDb(debug);
+    if (debug) {
+      console.time('CrudoDb initialized');
+    }
+    return rest
+      .setup()
+      .then(() => rest)
+      .finally(() => debug && console.timeEnd('CrudoDb initialized'));
+  }
 
-/**
- *
- * TODO: avoid onupgradeneeded, if the version is changed caused by minimum version of database
- * - minimum version as x = sum(schemas in database)
- */
-class RestfulDB {
-
-	static InternalEvent = {
-		CHANGED: 'dataChanged',
-		STORAGE_KEY: '_dataChangedTimestamp'
-	};
-
-	private readyTrigger: Subject<void> = new Subject<void>();
+  private databaseSchemas: Record<string, StoreSchema> = {};
 
   /**
-   * subscribe me to get notification about setup completeness.
-   * use me like `await DB.onReady$.pipe(take(1)).toPromise();`
+   * schemaKey -> Database instance
    */
-	public onReady$: Observable<void> = this.readyTrigger.asObservable().pipe(shareReplay(1));
+  private databases: Record<string, Database<unknown>> = {};
 
-	private databases: Record<string, Database<unknown>> = {};
+  private general: Database<InternalStoreEntry> = this.databases
+    .general as Database<InternalStoreEntry>;
 
-	constructor(sync?: boolean) {
-	  this.setup(sync);
-  }
+  /**
+   * dbName -> IndexedDb instance
+   */
+  private idbDatabases: Record<string, IDBDatabase> = {};
 
-  public awaitInitialized(): Promise<void> {
-	  return this.onReady$.pipe(take(1)).toPromise();
-  }
+  /**
+   * schemaKey -> Store instance
+   */
+  private idbObjectStores: Record<string, IDBObjectStore> = {};
 
-  private setup(syncAfterInit?: boolean): void {
-	  // setup internal database
-    initGeneralDb()
-      .then((db) => (this.databases.general = db))
-      .then(() => this.readyTrigger.next());
-    // trigger syncs ?
-    if (syncAfterInit) {
-      Promise.all(Object.values(this.databases).map((db) => db.sync()))
-        .then(() => console.debug('synced all databases'))
-        .catch((err) => console.error('error occurred while sync', err));
-    }
-  }
+  private constructor(private debug: boolean = false) {}
 
-	public async get<T>(schemaKey: string, id: IndexedKey): Promise<T | undefined> {
-		return execDatabase(
-		  schemaKey,
+  public async get<T>(
+    schemaKey: string,
+    id: IndexedKey
+  ): Promise<T | undefined> {
+    return execDatabase(
+      schemaKey,
       this.databases[schemaKey],
       (db: Database<T>) => db.get(id)
     );
-	}
+  }
 
   public getAll<T>(schemaKey: string): Promise<T[]> {
-	  return execDatabase(
-	    schemaKey,
+    return execDatabase(
+      schemaKey,
       this.databases[schemaKey],
       (db: Database<T>) => db.getAll()
     );
   }
 
   public create<T>(schemaKey: string, item: T): Promise<T | undefined> {
-	  return execDatabase(
-	    schemaKey,
+    return execDatabase(
+      schemaKey,
       this.databases[schemaKey],
       (db: Database<T>) => db.create(item)
     );
   }
 
-  public update<T>(schemaKey: string, item: T): Promise<T|undefined> {
-	  return execDatabase(
-	    schemaKey,
+  public update<T>(schemaKey: string, item: T): Promise<T | undefined> {
+    return execDatabase(
+      schemaKey,
       this.databases[schemaKey],
       (db: Database<T>) => db.update(item)
     );
   }
 
-  public registerDatabase<T>({
-		schema,
-		schemaKey,
-		api
-  	} : {
-	  schema: StoreSchema,
-	  api?: CrudApi<T>,
-	  schemaKey?: string
-  }): string {
-    const key = schemaKey || generateTempKey(schema);
-    const schemas = Object.values(this.databases).map((db) => db.schema);
-    const schemaMap = groupVersions([...schemas, schema]);
-    const dbVersion = schemaMap[schema.dbName] + 1;
-    const modifiedSchema = {
-      ...schema,
-      dbVersion
-    };
-	  this.databases[key] = new Database<T>(key, modifiedSchema, api);
-    this.updateGeneral(this.databases[key], schema.dbVersion);
-	  Object.values(this.databases).filter((db) => db.schema.dbName === schema.dbName).forEach((db) => {
-	    db.schema = {
-	      ...db.schema,
-        dbVersion
-      }
-    });
-	  return key;
-  }
-
-
-  private updateGeneral(database: Database<unknown>, dbVersion: number): void {
-    const general = this.databases.general as Database<InternalStoreEntry>;
-
-  }
-
-  public isDatabaseReady(schemaKey: string): Promise<boolean> {
-	  return execDatabase(
-	    schemaKey,
+  public delete<T>(schemaKey: string, item: T): Promise<boolean> {
+    return execDatabase(
+      schemaKey,
       this.databases[schemaKey],
-      (db: Database<unknown>) => db.awaitInitialized()
-    )
+      (db: Database<T>) => db.delete(item)
+    );
   }
 
-	private async onGoingOnline(): Promise<void> {
-		if (Object.values(this.databases).length < 1) {
-		  return;
+  public async registerSchema<T>(args: RegisterSchemaArgs<T>): Promise<string> {
+    const { schema, schemaKey } = args;
+    // schemaKey evaluation
+    const key = schemaKey || generateTempKey(schema);
+    // check existing schema
+    const indexedSchema = await this.general.get(key);
+    const usedSchema = await this.indexNewSchemaInGeneral(
+      schema,
+      key,
+      indexedSchema
+    );
+    if (!usedSchema) {
+      return key;
     }
-		await Promise.all(Object.values(this.databases).map((db: Database<unknown>) => db.sync()));
-	}
-
-}
-
-function onDataChanged(): void {
-  const timestamp = (+new Date()).toString();
-  window.dispatchEvent(
-    new CustomEvent(RestfulDB.InternalEvent.CHANGED, { detail: timestamp })
-  );
-  localStorage.setItem(
-    RestfulDB.InternalEvent.STORAGE_KEY,
-    timestamp
-  );
-}
-
-async function initGeneralDb(): Promise<Database<unknown>> {
-  const general = new Database<InternalStoreEntry>('__general__', SCHEMA);
-  return general.awaitInitialized().then(() => general);
-}
-
-function execDatabase<T, S>(schemaKey: string, database: Database<unknown> | undefined, callback: (db: Database<T>) => Promise<S>): Promise<S> {
-  return database ? callback(database as Database<T>) : Promise.reject(`${schemaKey} does not exists`);
-}
-
-function generateTempKey({dbName, store}: StoreSchema): string {
-  return `custom_schema:${dbName}:${store}`;
-}
-
-function groupVersions(databases: StoreSchema[]): Record<string, number> {
-  return databases.reduce((acc, schema) => {
-    const {dbName, dbVersion} = schema;
-    if (acc[dbName]) {
-      acc[dbName] = Math.max(acc[dbName], dbVersion);
-    } else {
-      acc[dbName] = dbVersion;
+    // check if schema effect other schemas
+    if (getSchemaStatusInDatabase(schema, indexedSchema) !== 'ready') {
+      await this.updateGeneral(usedSchema);
     }
-    return acc;
-  }, {} as Record<string, number>);
+    // close transactions of updated databases
+    // open necessary transactions
+    // update database instances
+    // determine if dbVersion have to increase by all stores in dbName or if could hold (new->increase, schema change->increase, reregister same -> left same)
+    return key;
+  }
+
+  private async updateGeneral(usedSchema: InternalStoreEntry): Promise<void> {
+    const { dbName, dbVersion } = usedSchema;
+    const updateNecessary = Object.entries(this.databaseSchemas).filter(
+      ([_, { dbName: dbNameItem }]) => dbNameItem === dbName
+    );
+
+    const schemas = await Promise.all(
+      updateNecessary.map(([key, _]) => this.general.get(key))
+    );
+
+    const readyToSave = schemas.reduce(
+      (acc, schema) => (schema ? [...acc, { ...schema, dbVersion }] : acc),
+      [] as InternalStoreEntry[]
+    );
+
+    await Promise.all(
+      readyToSave.map(async schema => this.general.update(schema))
+    );
+  }
+
+  private async indexNewSchemaInGeneral(
+    schema: StoreSchema,
+    schemaKey: string,
+    indexedSchema?: InternalStoreEntry
+  ): Promise<InternalStoreEntry | undefined> {
+    if (indexedSchema) {
+      return indexedSchema;
+    }
+    const start = +new Date();
+    const { dbName, dbVersion: indexedIn } = schema;
+    const dbVersion =
+      reduceDbNameToVersion(Object.values(this.databaseSchemas))[dbName] ?? 1;
+    return await this.general
+      .create({
+        ...schema,
+        indexedIn,
+        dbVersion,
+        id: schemaKey
+      })
+      .finally(
+        () =>
+          this.debug &&
+          console.debug('built schema', {
+            schemaKey,
+            took: +new Date() - start
+          })
+      );
+  }
+
+  private async setup(): Promise<void> {
+    const start = +new Date();
+    // setup internal database
+    this.databases.general = await initGeneralDb();
+    if (this.debug) {
+      console.debug('synced databases', {
+        took: +new Date() - start,
+        stores: Object.values(this.idbObjectStores)
+          .map(({ name }) => name)
+          .join(',')
+      });
+    }
+  }
 }

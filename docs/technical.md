@@ -1,10 +1,10 @@
-# technical documentation
+# technical todos
 
-## initialization
-
-1. load or setup internal configuration database
-
-* version mapping   
-    * known databases store there database versions and an "setup" version
-    - i.e. database "global" use 3 (third version change) and store "pets" is at version 1
-    - i.e. store "pets" update to version 2 "global" migrate all known stores to current global and don't trigger upgrade needed
+- [ ] handle multiple open object stores on one database
+- [ ] handle version upgrade, if other tabs or instances opened these database before
+    - [ ] fire event to block other tabs or instances to close database connection
+    - [ ] fire event if database could open again from other tabs or instances
+- [ ] transaction handling
+- [ ] qualified logging
+- [ ] debug statements and flags!
+- [ ] block browser to leave, if transactions running

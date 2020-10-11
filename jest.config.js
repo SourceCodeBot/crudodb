@@ -24,12 +24,12 @@ module.exports = {
   // collectCoverageFrom: null,
 
   // The directory where Jest should output its coverage files
-	// coverageDirectory: "coverage",
+  // coverageDirectory: "coverage",
 
   // An array of regexp pattern strings used to skip coverage collection
-	// coveragePathIgnorePatterns: [
-//    "/node_modules/"
-	// ],
+  // coveragePathIgnorePatterns: [
+  //    "/node_modules/"
+  // ],
 
   // A list of reporter names that Jest uses when writing coverage reports
   // coverageReporters: [
@@ -69,14 +69,14 @@ module.exports = {
   // ],
 
   // An array of file extensions your modules use
-	// moduleFileExtensions: [
-	//    "js",
+  // moduleFileExtensions: [
+  //    "js",
   //   "json",
   //   "jsx",
-//    "ts",
+  //    "ts",
   //   "tsx",
   //   "node"
-	// ],
+  // ],
 
   // A map from regular expressions to module names that allow to stub out resources with a single module
   // moduleNameMapper: {},
@@ -123,9 +123,7 @@ module.exports = {
   // runner: "jest-runner",
 
   // The paths to modules that run some code to configure or set up the testing environment before each test
-  setupFiles: [
-	  "fake-indexeddb/auto"
-  ],
+  setupFiles: ['fake-indexeddb/auto']
 
   // A list of paths to modules that run some code to configure or set up the testing framework before each test
   // setupFilesAfterEnv: [],
@@ -134,7 +132,7 @@ module.exports = {
   // snapshotSerializers: [],
 
   // The test environment that will be used for testing
-	// testEnvironment: "node",
+  // testEnvironment: "node",
 
   // Options that will be passed to the testEnvironment
   // testEnvironmentOptions: {},
@@ -146,9 +144,9 @@ module.exports = {
   // testMatch: null,
 
   // An array of regexp pattern strings that are matched against all test paths, matched tests are skipped
-	// testPathIgnorePatterns: [
-//    "/node_modules/"
-	// ],
+  // testPathIgnorePatterns: [
+  //    "/node_modules/"
+  // ],
 
   // The regexp pattern or array of patterns that Jest uses to detect test files
   // testRegex: [],
@@ -171,9 +169,9 @@ module.exports = {
   // },
 
   // An array of regexp pattern strings that are matched against all source file paths, matched files will skip transformation
-	// transformIgnorePatterns: [
-//    "/node_modules/"
-	// ],
+  // transformIgnorePatterns: [
+  //    "/node_modules/"
+  // ],
 
   // An array of regexp pattern strings that are matched against all modules before the module loader will automatically return a mock for them
   // unmockedModulePathPatterns: undefined,
