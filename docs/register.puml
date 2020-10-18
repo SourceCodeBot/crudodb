@@ -1,0 +1,25 @@
+@startuml
+
+start
+:instance.registerSchema(args);
+:evaluate schemaKey;
+if (schemaKey exists) then (false)
+  :lookup schema in general;
+  if (general has database already managed by other schema) then (true)
+    :evaluate current dbVersion;
+    if (have to increase all schema dbVersions) then (true)
+      :increase all versions;
+      :use dummy upgrader;
+    endif
+    :create store to dbName;
+    :save new schemas to general;
+  else (false)
+    :create store to dbName;
+    :save new schema to general;
+  endif
+else (true)
+endif
+:return schemaKey;
+stop
+
+@enduml

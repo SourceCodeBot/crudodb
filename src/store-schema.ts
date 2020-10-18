@@ -35,7 +35,7 @@ export interface StoreSchema {
   ) => Promise<boolean>;
 }
 
-export interface InternalStoreEntry extends StoreSchema {
+export interface InternalStoreEntry extends Omit<StoreSchema, 'onUpgradeNeeded'> {
   id: string;
   // version of database for StoreSchema#dbVersion
   indexedIn: number;

@@ -53,7 +53,7 @@ export class Database<T> {
         await this.api
           .getAll()
           .then(fromRemote => this.updateLocalStorage(fromRemote))
-          .catch((err) => console.error(`${this.key} sync failed with api`, err)); // TODO: write test
+          .catch((err) => console.error(`${this.key} sync failed with api`, err));
       }
       done();
     });
@@ -112,7 +112,7 @@ export class Database<T> {
   public create(item: T): Promise<T | undefined> {
     return this.createLocal(item)
       .catch(() => undefined)
-      .then((entity) => entity && this.createRemote(item).catch(() => entity));
+      .then((entity) => entity && this.createRemote(entity).catch(() => entity));
   }
 
   /**
@@ -121,7 +121,7 @@ export class Database<T> {
    */
   public update(item: T): Promise<T | undefined> {
     return this.updateLocal(item)
-      .catch(() => undefined) // TODO: write test
+      .catch(() => undefined)
       .then((entity) => entity && this.updateRemote(entity).catch(() => entity));
   }
 
@@ -133,7 +133,7 @@ export class Database<T> {
     return this.getId(item, (id: T[keyof T]) =>
       this.deleteLocal(id, item)
         .then((result) => result && this.deleteRemote(id, item))
-    ).catch(() => false); // TODO: write test
+    ).catch(() => false);
   }
 
   /*****************************
@@ -168,7 +168,7 @@ export class Database<T> {
     );
     deleteLocal.forEach(item =>
       this.getId(item, id => this.deleteLocal(id, item, false)).catch(err =>
-        logInfo(item, err) // TODO: write test
+        logInfo(item, err)
       )
     );
     updateLocal.forEach(item =>
@@ -201,12 +201,12 @@ export class Database<T> {
         .then(async (result: T | undefined) => {
           const deleted = await this.getId(item,
             (id: T[keyof T]) => this.deleteLocal(id, item, false)
-          ).catch(() => false); // TODO: write test
+          ).catch(() => false);
           return deleted && result
             ? this.createLocal(result, false)
             : undefined;
         })
-        .catch(err => { // TODO: write test
+        .catch(err => {
           console.error(
             `can't call create of api ${buildEntityIdent(this.schema)}`,
             err
@@ -261,7 +261,7 @@ export class Database<T> {
     if (!addFlag) {
       return handleRequest(this.objectStore.delete(id as unknown as IndexedKey), item)
         .then(() => true)
-        .catch(() => false); // TODO: write test
+        .catch(() => false);
     }
     return this.get(id as unknown as T[keyof T])
       .then((entity) => entity && handleRequest(this.objectStore.put({
@@ -335,7 +335,7 @@ function handleRequest<T, S>(
       let result: T | undefined = undefined;
       request.onsuccess = () => (result = item);
       request.onerror = evt => {
-        console.error('can not handle operation', { evt, item }); // TODO: write test
+        console.error('can not handle operation', { evt, item });
         throw new Error(evt.type);
       };
       request.transaction!.oncomplete = () => resolve(result);
@@ -344,7 +344,7 @@ function handleRequest<T, S>(
         item,
         error
       });
-      reject(error); // TODO: write test
+      reject(error);
     }
   });
 }

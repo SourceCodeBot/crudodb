@@ -1,9 +1,6 @@
 import {
-  createMapOfDbNameAndVersion,
-  detectVersionForDatabase,
   execDatabase,
   generateTempKey,
-  getSchemaStatusInDatabase,
   isDeleted,
   isOnlineSupport
 } from '../src/utils';
@@ -34,34 +31,6 @@ describe('#isDeleted', () => {
   });
 });
 
-describe('#detectVersionForDatabase', () => {
-  it('should return 1 as default', () => {
-    expect(detectVersionForDatabase([], '')).toEqual(1);
-  });
-
-  it('should return 10 for database', () => {
-    expect(
-      detectVersionForDatabase(
-        [{ dbVersion: 10, dbName: 'schema', indices: [], store: 'a' }],
-        'schema'
-      )
-    ).toEqual(10);
-  });
-
-  it('should return highest version for database', () => {
-    expect(
-      detectVersionForDatabase(
-        [
-          { dbVersion: 1, dbName: 'schema', indices: [], store: 'a' },
-          { dbVersion: 5, dbName: 'schema', indices: [], store: 'a' },
-          { dbVersion: 10, dbName: 'schema', indices: [], store: 'a' }
-        ],
-        'schema'
-      )
-    ).toEqual(10);
-  });
-});
-
 describe('#isOnlineSupport', () => {
   it('should have isOnline support', () => {
     expect(isOnlineSupport({ isOnline: () => Promise.resolve(true) })).toEqual(
@@ -85,7 +54,7 @@ describe('#execDatabase', () => {
 
   it('should not execute callback', async () => {
     const callback = jest.fn();
-    let result: any = null;
+    let result: any;
     try {
       result = await execDatabase('key', undefined, callback);
     } catch (e) {
@@ -103,26 +72,7 @@ describe('#generateTempKey', () => {
   });
 });
 
-describe('#createMapOfDbNameAndVersion', () => {
-  it('should create map for schemas', () => {
-    const schemas: StoreSchema[] = [
-      { dbVersion: 1, dbName: 'b', store: 'x', indices: [] },
-      { dbVersion: 2, dbName: 'b', store: 'z', indices: [] },
-      { dbVersion: 2, dbName: 'c', store: 'y', indices: [] }
-    ];
-    expect(createMapOfDbNameAndVersion(schemas)).toMatchObject({
-      b: 2,
-      c: 2
-    });
-  });
-
-  it('should create empty map for empty array', () => {
-    const schemas: StoreSchema[] = [];
-    expect(createMapOfDbNameAndVersion(schemas)).toMatchObject({});
-  });
-});
-
-describe('#prepareStoreAndOpenTransactionWithDatabase', () => {
+describe('#prepareStoreWithDatabase', () => {
   it('fail - tbd', () => {
     fail('please write awesome high coverage tests for me!');
   });
@@ -131,24 +81,5 @@ describe('#prepareStoreAndOpenTransactionWithDatabase', () => {
 describe('#initGeneralDb', () => {
   it('should build database with', () => {
     fail('please write awesome high coverage tests for me!');
-  });
-});
-
-describe('#getSchemaStatusInDatabase', () => {
-  it('should return ready for', () => {
-    expect(getSchemaStatusInDatabase(schema, schema)).toEqual('ready');
-  });
-
-  it('should return upgrade for', () => {
-    expect(
-      getSchemaStatusInDatabase(schema, {
-        ...schema,
-        dbVersion: 42
-      })
-    ).toEqual('upgrade');
-  });
-
-  it('should return initial for', () => {
-    expect(getSchemaStatusInDatabase(schema)).toEqual('initial');
   });
 });

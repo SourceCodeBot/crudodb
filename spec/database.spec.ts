@@ -1,79 +1,16 @@
 import { Database } from '../src/database';
 import { CrudApi, StoreSchema } from '../src';
 import {CheckApi} from "../src/check-api";
+import {BASE_SCHEMA, randomString, unload} from "./helper.spec";
+import {createDao, Dao, DaoApi, DaoApiWithApiState} from "./dao";
 
 require('fake-indexeddb/auto');
 
-interface Dao {
-  id?: string;
-  key: string;
-  value: unknown;
-}
-
-const DAO_SCHEMA: StoreSchema = {
-  indices: [{ name: 'id', unique: true }, { name: 'key' }, { name: 'value' }],
-  store: 'jest',
-  dbName: 'jest-database-CHANGE',
-  dbVersion: 1
-};
-
-class DaoApi implements CrudApi<Dao> {
-  private storage: Record<string, Dao> = {};
-
-  public delete(obj: Dao): Promise<boolean> {
-    if (obj.id && this.storage[obj.id]) {
-      delete this.storage[obj.id];
-      return Promise.resolve(true);
-    }
-    return Promise.resolve(false);
-  }
-  public create(obj: Dao): Promise<Dao | undefined> {
-    if (obj.id) {
-      this.storage[obj.id] = obj;
-      return Promise.resolve(obj);
-    }
-    return Promise.reject('no id');
-  }
-  public get(id: string): Promise<Dao | undefined> {
-    return this.storage[id]
-      ? Promise.resolve(this.storage[id])
-      : Promise.reject('not found');
-  }
-  public getAll(): Promise<Dao[]> {
-    return Promise.resolve(Object.values(this.storage));
-  }
-  public update(obj: Dao): Promise<Dao | undefined> {
-    if (!obj.id) {
-      return Promise.reject('no id');
-    }
-    const inner = this.storage[obj.id];
-    if (inner) {
-      this.storage[obj.id] = obj;
-      return Promise.resolve(obj);
-    }
-    return Promise.reject('not found');
-  }
-}
-
-class DaoApiWithApiState extends DaoApi implements CheckApi {
-
-  constructor(public _isOnline: boolean = false) {
-    super();
-  }
-
-  public setOnline(isOnline: boolean): void {
-    this._isOnline = isOnline;
-  }
-
-  public isOnline(): Promise<boolean> {
-    return Promise.resolve(this._isOnline);
-  }
-}
 
 describe('#database', () => {
 
   afterEach(async () => {
-    await unload();
+    await unload('jest-database');
   });
 
   function initialize(schema: StoreSchema): Promise<IDBObjectStore> {
@@ -102,21 +39,6 @@ describe('#database', () => {
       req.onblocked = reject;
       req.onerror = reject;
     });
-  }
-
-  function unload(): Promise<boolean> {
-    return new Promise((resolve, reject) => {
-      const request = indexedDB.deleteDatabase('jest-database');
-      request.onblocked = () => reject('blocked');
-      request.onupgradeneeded = () => reject('upgradeneeded');
-      request.onsuccess = resolve;
-      request.onerror = () => reject('error');
-    })
-      .then(() => true)
-      .catch(err => {
-        console.error('unload failed', err);
-        return false;
-      });
   }
 
   function getDb<T>(schema: StoreSchema, api?: CrudApi<T>, initialLoad?: T[]): Promise<Database<T>> {
@@ -202,7 +124,10 @@ describe('#database', () => {
       };
       const entity = await instance.create(dao);
       const fromStore = await instance.get(test);
-      expect(fromStore).not.toEqual(entity);
+      expect(fromStore).toEqual({
+        ...entity,
+        flag: 'C'
+      });
       expect(fromStore).not.toHaveProperty('notIndexedDaoKey');
     });
 
@@ -276,6 +201,22 @@ describe('#database', () => {
         flag: 'C'
       });
     });
+
+    it('should fail while sync with api', async () => {
+      const test = 'shouldfailwhilesyncwithapi';
+      const schema = createSchema(`jest-database-${test}`);
+      const api: DaoApi = {
+        create: () => Promise.reject(new Error('ups'))
+      } as any;
+      const instance = await getDb<Dao>(schema, api);
+      const dao = createDao(test);
+      const entity = await instance.create(dao);
+      expect(entity).toEqual({
+        ...dao,
+        flag: 'C'
+      });
+    });
+
   });
 
   describe('#delete', () => {
@@ -359,6 +300,21 @@ describe('#database', () => {
       const entity = await instance.delete(dao);
       expect(entity).toEqual(true);
     });
+
+    it('should fail local deletion', async () => {
+      const test = 'shouldfaillocaldeletion';
+      const instance = await getDb<Dao>(
+        createSchema(`jest-database-${test}`)
+      );
+      const entity = await instance.delete(
+        {
+          key: `key_${test}`,
+          value: 23
+        }
+      );
+      expect(entity).toEqual(false);
+    });
+
   });
 
   describe('#get', () => {
@@ -603,6 +559,18 @@ describe('#database', () => {
       });
     });
 
+    it('should fail local update', async () => {
+      const test = 'shouldfaillocalupdate';
+      const instance = await getDb<Dao>(
+        createSchema(`jest-database-${test}`)
+      );
+      const updated = {
+        key: `key_${test}`,
+        value: 42
+      };
+      const entity = await instance.update(updated);
+      expect(entity).toBeUndefined();
+    });
   });
 
   describe('#sync', () => {
@@ -725,21 +693,10 @@ describe('#database', () => {
 
 });
 
-function randomString(): string {
-  return (Math.random() * 1_000_000).toString(16);
-}
-
-function createDao(prefix: string): Dao {
-  return {
-    id: prefix,
-    key: `key_${prefix}`,
-    value: 42
-  };
-}
 
 function createSchema(dbName: string): StoreSchema {
   return {
-    ...DAO_SCHEMA,
+    ...BASE_SCHEMA,
     dbName
   };
 }
