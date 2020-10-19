@@ -16,47 +16,45 @@ export class Database<T> {
   /**
    * push local transactions to remote and try to fetch updates from remote
    */
-  public sync(): Promise<void> {
+  public async sync(): Promise<void> {
     type F = WithFlag<T>;
-    return new Promise(async (done, _) => {
-      const isOnline = this.api && isOnlineSupport(this.api)
-        ? await this.api.isOnline()
-        : undefined;
-      if (isOnline === false) {
-        done();
-        return;
-      }
-      const localItems = new Promise<F[]>((resolve, reject) => {
-        this.prepareTransaction();
-        const req = this.objectStore.index('flag').getAll();
-        req.onsuccess = () => resolve(req.result as F[]);
-        req.onerror = () => reject();
-      });
-      const actions = (await localItems).map(
-        (item: F): Promise<unknown> => {
-          switch (item.flag) {
-            case 'D':
-              return this.getId(item, (id: T[keyof T]) =>
-                this.deleteRemote(id, item)
-              );
-            case 'C':
-              return this.createRemote(item);
-            case 'U':
-              return this.updateRemote(item);
-            default:
-              return Promise.resolve();
-          }
-        }
-      );
-      await Promise.all(actions);
-      if (this.api && (isOnline === undefined || isOnline)) {
-        await this.api
-          .getAll()
-          .then(fromRemote => this.updateLocalStorage(fromRemote))
-          .catch((err) => console.error(`${this.key} sync failed with api`, err));
-      }
-      done();
+    const isOnline = this.api && isOnlineSupport(this.api)
+      ? await this.api.isOnline()
+      : true;
+    if (!isOnline) {
+      return;
+    }
+    const localItems = new Promise<F[]>((resolve, reject) => {
+      this.prepareTransaction();
+      const req = this.objectStore.index('flag').getAll();
+      req.onsuccess = () => resolve(req.result as F[]);
+      req.onerror = () => reject();
     });
+    const actions = (await localItems).map(
+      (item: F): Promise<unknown> => {
+        switch (item.flag) {
+          case 'D':
+            return this.getId(item, (id: T[keyof T]) =>
+              this.deleteRemote(id, item)
+            );
+          case 'C':
+            return this.createRemote(item);
+          case 'U':
+            return this.updateRemote(item);
+          default:
+            return Promise.resolve();
+        }
+      }
+    );
+    await Promise.all(actions);
+    if (this.api && isOnline) {
+      try {
+        const fromRemote = await this.api.getAll();
+        await this.updateLocalStorage(fromRemote);
+      } catch (error) {
+        console.error(`${this.key} sync failed with api`, error);
+      }
+    }
   }
 
   public get(id: T[keyof T]): Promise<T | undefined> {
@@ -69,11 +67,14 @@ export class Database<T> {
         if (!result && this.api) {
           const isOnline = isOnlineSupport(this.api)
             ? await this.api.isOnline()
-            : undefined;
-          if (isOnline === undefined || isOnline) {
-            await this.api.get(id)
-              .then((response) => resolve(response))
-              .catch((e) => reject(e));
+            : true;
+          if (isOnline) {
+            try {
+              const response = await this.api.get(id);
+              resolve(response);
+            } catch (error) {
+              reject(error);
+            }
             return;
           }
         }
@@ -91,16 +92,18 @@ export class Database<T> {
         if (result?.length < 1 && this.api) {
           const isOnline = isOnlineSupport(this.api)
             ? await this.api.isOnline()
-            : undefined;
-          if (isOnline === undefined || isOnline) {
-            await this.api.getAll()
-              .then((response) => resolve(response))
-              .catch((e) => reject(e));
+            : true;
+          if (isOnline) {
+            try {
+              const response = await this.api.getAll();
+              resolve(response);
+            } catch (error) {
+              reject(error);
+            }
             return;
           }
         }
         resolve(request.result.filter(item => !isDeleted(item)) as T[]);
-
       };
     });
   }

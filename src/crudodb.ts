@@ -3,7 +3,6 @@ import { Database } from './database';
 import { CrudApi } from './crud-api';
 import {
   evaluateDbVersion,
-  execDatabase,
   generateTempKey,
   initGeneralDb,
   prepareStoreWithDatabase
@@ -22,10 +21,14 @@ export class CrudoDb {
     if (debug) {
       console.time('CrudoDb initialized');
     }
-    return instance
-      .setup()
-      .then(() => instance)
-      .finally(() => debug && console.timeEnd('CrudoDb initialized'));
+    try {
+      await instance.setup();
+      return instance;
+    } finally {
+      if (debug) {
+        console.timeEnd('CrudoDb initialized');
+      }
+    }
   }
 
   private databaseSchemas: Record<string, StoreSchema> = {};
@@ -48,43 +51,34 @@ export class CrudoDb {
     schemaKey: string,
     id: T[keyof T]
   ): Promise<T | undefined> {
-    return execDatabase(
-      schemaKey,
-      this.databases[schemaKey],
-      (db: Database<T>) => db.get(id)
-    );
+    this.validateSchemaKey(schemaKey);
+    return (this.databases[schemaKey] as Database<T>).get(id);
   }
 
   public getAll<T>(schemaKey: string): Promise<T[]> {
-    return execDatabase(
-      schemaKey,
-      this.databases[schemaKey],
-      (db: Database<T>) => db.getAll()
-    );
+    this.validateSchemaKey(schemaKey);
+    return (this.databases[schemaKey] as Database<T>).getAll();
   }
 
   public create<T>(schemaKey: string, item: T): Promise<T | undefined> {
-    return execDatabase(
-      schemaKey,
-      this.databases[schemaKey],
-      (db: Database<T>) => db.create(item)
-    );
+    this.validateSchemaKey(schemaKey);
+    return (this.databases[schemaKey] as Database<T>).create(item);
   }
 
   public update<T>(schemaKey: string, item: T): Promise<T | undefined> {
-    return execDatabase(
-      schemaKey,
-      this.databases[schemaKey],
-      (db: Database<T>) => db.update(item)
-    );
+    this.validateSchemaKey(schemaKey);
+    return (this.databases[schemaKey] as Database<T>).update(item);
   }
 
   public delete<T>(schemaKey: string, item: T): Promise<boolean> {
-    return execDatabase(
-      schemaKey,
-      this.databases[schemaKey],
-      (db: Database<T>) => db.delete(item)
-    );
+    this.validateSchemaKey(schemaKey);
+    return this.databases[schemaKey].delete(item);
+  }
+
+  private validateSchemaKey(key: string): Promise<void> | void {
+    if (!this.databases[key]) {
+      throw new Error(`${key} does not exists`);
+    }
   }
 
   public async registerSchema<T>(args: RegisterSchemaArgs<T>): Promise<string | undefined> {
@@ -126,10 +120,8 @@ export class CrudoDb {
        return key;
     }
 
-    const itemsToUpdate = await this.general.getAll()
-      .then((items) =>
-        items.filter(({dbName}) => dbName === schema.dbName)
-      );
+    const items = await this.general.getAll();
+    const itemsToUpdate = items.filter(({ dbName}) => dbName === schema.dbName);
     const currentVersion = evaluateDbVersion(itemsToUpdate, schema.dbName);
     const version = currentVersion + schema.dbVersion;
 
@@ -194,10 +186,8 @@ async function upgradeExistingSchema(
   indexedSchema: InternalStoreEntry,
   openDatabase?: IDBDatabase
 ): Promise<IDBDatabase> {
-  const internals = await general.getAll()
-    .then((databases) =>
-      databases.filter(({ dbName }) => dbName === indexedSchema.dbName)
-    );
+  const databases = await general.getAll();
+  const internals = databases.filter(({ dbName }) => dbName === indexedSchema.dbName);
   const version = evaluateDbVersion(internals, indexedSchema.dbName);
   const withNewVersion = internals.map((item) => ({
     ...item,

@@ -1,7 +1,7 @@
 import { Database } from '../src/database';
 import { CrudApi, StoreSchema } from '../src';
 import {CheckApi} from "../src/check-api";
-import {BASE_SCHEMA, randomString, unload} from "./helper.spec";
+import {BASE_SCHEMA, randomString, unload} from "./helper";
 import {createDao, Dao, DaoApi, DaoApiWithApiState} from "./dao";
 
 require('fake-indexeddb/auto');

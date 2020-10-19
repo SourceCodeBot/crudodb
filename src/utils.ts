@@ -15,16 +15,6 @@ export function isOnlineSupport(object: any): object is CheckApi {
   return !!object.isOnline;
 }
 
-export function execDatabase<T, S>(
-  schemaKey: string,
-  database: Database<unknown> | undefined,
-  callback: (db: Database<T>) => Promise<S>
-): Promise<S> {
-  return database
-    ? callback(database as Database<T>)
-    : Promise.reject(`${schemaKey} does not exists`);
-}
-
 export function generateTempKey({ dbName, store }: StoreSchema): string {
   return `custom_schema:${dbName}:${store}`;
 }

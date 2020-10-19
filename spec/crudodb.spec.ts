@@ -1,5 +1,5 @@
 import {CrudoDb, StoreSchema} from '../src';
-import {BASE_SCHEMA, unload} from "./helper.spec";
+import {BASE_SCHEMA, unload} from "./helper";
 import {InternalStoreEntry, SCHEMA} from "../src/store-schema";
 import {createDao, Dao, DaoApi} from "./dao";
 
@@ -210,11 +210,14 @@ describe('#crudoDb', () => {
     });
 
     it('should fail to handle get request to not existing database', async () => {
+      expect.assertions(1);
       test = 'shouldfailtohandlegetrequesttonotexistingdatabase';
 
-      await expect(instance.get<Dao>('notexists', 'random'))
-        .rejects
-        .toEqual('notexists does not exists');
+      try {
+        await instance.get<Dao>('notexists', 'random');
+      } catch (e) {
+        expect(e).toEqual(new Error('notexists does not exists'));
+      }
     });
 
     it('should handle create request to database', async () => {
@@ -232,11 +235,14 @@ describe('#crudoDb', () => {
     });
 
     it('should fail to handle create request to not existing database', async () => {
+      expect.assertions(1);
       test = 'shouldfailtohandlecreaterequesttonotexistingdatabase';
 
-      await expect(instance.create<Dao>('notexists', createDao(test)))
-        .rejects
-        .toEqual('notexists does not exists');
+      try {
+        await instance.create<Dao>('notexists', createDao(test))
+      } catch (e) {
+        expect(e).toEqual(new Error('notexists does not exists'));
+      }
     });
 
 
@@ -261,11 +267,14 @@ describe('#crudoDb', () => {
     });
 
     it('should fail to handle update request to not existing database', async () => {
+      expect.assertions(1);
       test = 'shouldfailtohandleupdaterequesttonotexistingdatabase';
 
-      await expect(instance.update<Dao>('notexists', createDao(test)))
-        .rejects
-        .toEqual('notexists does not exists');
+      try {
+        await instance.update<Dao>('notexists', createDao(test))
+      } catch (e) {
+        expect(e).toEqual(new Error('notexists does not exists'));
+      }
     });
 
     it('should handle delete request to database', async () => {
@@ -286,11 +295,14 @@ describe('#crudoDb', () => {
     });
 
     it('should fail to handle delete request to not existing database', async () => {
+      expect.assertions(1);
       test = 'shouldfailtohandledeleterequesttonotexistingdatabase';
 
-      await expect(instance.delete<Dao>('notexists', createDao(test)))
-        .rejects
-        .toEqual('notexists does not exists');
+      try {
+        await instance.delete<Dao>('notexists', createDao(test));
+      } catch (e) {
+        expect(e).toEqual(new Error('notexists does not exists'));
+      }
     });
   });
 
