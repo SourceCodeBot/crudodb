@@ -1,0 +1,26 @@
+name: Build and publish crudodb
+
+on:
+  push:
+    branches: [ master ]
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Setup Node
+        uses: actions/setup-node@v1
+        with:
+          node-version: '12'
+      - name: Checkout
+        uses: actions/checkout@v2
+      - name: Install Dependencies
+        run: yarn install
+      - name: Test
+        run: yarn test
+      - name: Build
+        run: yarn build
+      - name: Release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: yarn semantic-release
