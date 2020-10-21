@@ -1,4 +1,3 @@
-
 export interface CheckApi {
-	isOnline: () => Promise<boolean>;
+  isOnline: () => Promise<boolean>;
 }

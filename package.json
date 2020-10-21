@@ -1,46 +1,52 @@
 {
-  "name": "restfuldb",
-  "version": "1.0.0-alpha",
-  "description": "offline first restful indexeddb wrapper",
+  "name": "crudodb",
+  "version": "0.0.0-development",
+  "description": "offline first crud api for indexeddb",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "scripts": {
     "test": "jest",
-    "build": "tsc"
+    "build": "tsc -p src/tsconfig.app.json",
+    "test:watch": "jest --watch",
+    "test:coverage": "jest --coverage",
+    "format:prettier": "prettier --config .prettierrc --write",
+    "format:prettier:all": "yarn format:prettier \"**/*.+(js|jsx|json|yml|yaml|css|less|scss|ts|tsx|html)\"",
+    "semantic-release": "semantic-release"
   },
   "repository": {
     "type": "git",
-    "url": "git+https://gitlab.com/SourceCodeBot/restfuldb.git"
+    "url": "https://github.com/SourceCodeBot/crudodb.git"
   },
   "keywords": [
     "indexeddb",
-    "restful",
+    "crud",
     "wrapper",
     "offline-first"
   ],
   "author": "SourceCodeBot <dev@nils-heinemann.de>",
   "license": "MIT",
   "bugs": {
-    "url": "https://gitlab.com/SourceCodeBot/restfuldb/issues"
+    "url": "https://github.com/SourceCodeBot/crudodb/issues"
   },
-  "homepage": "https://gitlab.com/SourceCodeBot/restfuldb#readme",
+  "homepage": "https://github.com/SourceCodeBot/crudodb#readme",
   "devDependencies": {
-    "@types/jest": "^25.1.2",
-    "@types/node": "^13.7.1",
-    "babel-jest": "^25.1.0",
-    "eslint": "^6.8.0",
+    "@types/jest": "^26.0.14",
+    "@types/node": "^14.11.5",
+    "@typescript-eslint/parser": "^4.4.0",
+    "babel-jest": "^26.5.2",
+    "eslint": "^7.10.0",
     "eslint-config-prettier": "^6.10.0",
     "eslint-plugin-import": "^2.20.1",
-    "eslint-plugin-jest": "^23.7.0",
+    "eslint-plugin-jest": "^24.1.0",
     "eslint-plugin-typescript": "^0.14.0",
     "fake-indexeddb": "^3.0.0",
-    "jest": "^25.1.0",
+    "jest": "^26.5.2",
     "jest-preset-typescript": "^1.2.0",
-    "prettier": "^1.19.1",
-    "ts-jest": "^25.2.0",
+    "prettier": "^2.1.2",
+    "ts-jest": "^26.4.1",
     "tslint": "^6.0.0",
     "tslint-config-airbnb": "^5.11.2",
-    "typescript": "^3.7.5"
-  },
-  "peerDependencies": {}
+    "typescript": "^4.0.3",
+    "semantic-release": "^17.2.1"
+  }
 }
