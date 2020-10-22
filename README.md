@@ -1,24 +1,20 @@
 # CrudoDb
 
-typescript written offline first indexeddb wrapper.
+Offline-first IndexedDb wrapper written in TypeScript, which is able to sync with backend services by passing optional service implementation.
 
-is able to sync with backend services by passing optional service implementation.
+## Why?
 
-## why?
+CrudoDb offers some advantages over other solutions as it offers an offline-first and offline-only solution.
 
-CrudoDb offers some advantages over other solutions.
-
-CrudoDb offers an offline-first and offline-only solution.
-
-An API connection is optional and can be synchronized e.g. after an already completed offline implementation.
+An optional API connection and can be synchronized e.g. after an already completed offline implementation.
 
 ## crudodb
 
-store list of `Database<T>` instances and manage them.
+Store list of `Database<T>` instances and manage them.
 
 `schemaKey` is an identifier to the instance of `Database<T>` you want to access.
 
-for example:
+For example:
 
 ```typescript
 const instance = await CrudoDb.setup();
@@ -33,30 +29,26 @@ const item: T = {key: 'value', id: '1'};
 wrapper.create(key, item);
 ```
 
-## database
+## Database
 
-manage all CRUD operations against store and optional api.
+* Manages all CRUD operations against store and optional API.
+* Store item in indexeddb and on success try to call the api#create.
+* if no API is defined, the item only lives in the IndexedDb.
+* if an API is defined, the created item will be sent to the API.
+* on successful creation, the local item will update without creation flag
 
-store item in indexeddb and on success try to call the api#create.
+### Flags
 
-if no api defined, the item only lives in the indexeddb.
-
-if api defined, the created item will send to api.
-
-on successful creation, the local item will update without creation flag.
-
-### flags
-
-there are 3 flags to mark an item in indexeddb for processing.
+There are 3 flags to mark an item in indexeddb for processing.
 
 + C
 + U
 + D
 
 
-## recommendations
+## Recommendations
 
-### angular
+### Angular
 
 ```typescript
 @Injectable({providedIn: 'root'})
@@ -88,7 +80,7 @@ export class DaoService {
 
 ```
 
-### react (hooks)
+### React (Hooks API)
 
 ```typescript jsx
 
