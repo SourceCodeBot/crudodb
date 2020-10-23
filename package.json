@@ -23,9 +23,6 @@
     "wrapper",
     "offline-first"
   ],
-  "files": [
-    "dist/src"
-  ],
   "author": "SourceCodeBot <dev@nils-heinemann.de>",
   "license": "MIT",
   "bugs": {
