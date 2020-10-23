@@ -20,7 +20,7 @@ jobs:
       - name: Build
         run: yarn build
       - name: prepare publish
-        run: cp package.json dist/src/
+        run: cp package.json dist/src/ && cp README.md dist/src/
       - name: Release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
