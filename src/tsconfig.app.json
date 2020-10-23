@@ -5,5 +5,8 @@
     "baseUrl": "./"
   },
   "include": ["**/*.ts", "**/*.d.ts"],
-  "exclude": ["**/*.spec.ts"]
+  "exclude": ["**/*.spec.ts"],
+  "files": [
+    "index.ts"
+  ]
 }

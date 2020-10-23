@@ -1,5 +1,8 @@
 # CrudoDb
 
+[![npm version](https://badgen.net/npm/v/crudodb)](https://badge.fury.io/js/crudodb) [![npm downloads](https://badgen.net/npm/dt/crudodb)](https://badgen.net/npm/dt/crudodb)
+
+
 Offline-first IndexedDb wrapper written in TypeScript, which is able to sync with backend services by passing optional service implementation.
 
 ## Why?
