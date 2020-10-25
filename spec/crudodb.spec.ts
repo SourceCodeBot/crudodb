@@ -1,7 +1,8 @@
-import {CrudoDb, StoreSchema} from '../src';
-import {BASE_SCHEMA, unload} from "./helper";
-import {InternalStoreEntry, SCHEMA} from "../src/store-schema";
-import {createDao, Dao, DaoApi} from "./dao";
+import { CrudoDb, StoreSchema } from '../src';
+import { BASE_SCHEMA, unload } from "./helper";
+import { InternalStoreEntry, SCHEMA } from "../src/store-schema";
+import { createDao, Dao, DaoApi } from "./dao";
+import {prepareStoreWithDatabase} from "../src/utils";
 
 require('fake-indexeddb/auto');
 
@@ -187,6 +188,42 @@ describe('#crudoDb', () => {
       expect(indexedSchemas).not.toBeUndefined();
       expect(indexedSchemas[0].dbVersion).toEqual(3);
       expect(indexedSchemas).toHaveLength(3);
+    });
+
+    it('should migrate schema in database with new field', async () => {
+      test = 'shouldmigrateschemaindatabasewithnewfield';
+
+      const schema = createSchema({ dbName: test, store: 'A', dbVersion: 1 });
+      await instance.registerSchema({ schema });
+      instance.close();
+      const db = await prepareStoreWithDatabase({
+        ...schema,
+        dbVersion: 2,
+        indices: [...schema.indices, { name: 'newField' }]
+      });
+
+      const store = db.transaction(schema.store, 'readwrite').objectStore(schema.store);
+      expect(store.indexNames).toEqual(['id', 'key', 'newField', 'value']);
+      db.close();
+    });
+
+    it('should migrate schema in database with one field less', async () => {
+      test = 'shouldmigrateschemaindatabasewithonefieldless';
+
+      const schema = createSchema({ dbName: test, store: 'A', dbVersion: 1 });
+      await instance.registerSchema({ schema: {
+          ...schema,
+          indices: [...schema.indices, { name: 'newField' }]
+        } });
+      instance.close();
+      const db = await prepareStoreWithDatabase({
+        ...schema,
+        dbVersion: 2
+      });
+
+      const store = db.transaction(schema.store, 'readwrite').objectStore(schema.store);
+      expect(store.indexNames).toEqual(['id', 'key', 'value']);
+      db.close();
     });
 
   });

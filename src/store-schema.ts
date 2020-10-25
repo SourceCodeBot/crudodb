@@ -31,7 +31,8 @@ export interface StoreSchema {
    */
   onUpgradeNeeded?: (
     db: IDBDatabase,
-    event: IDBVersionChangeEvent
+    event: IDBVersionChangeEvent,
+    objectStore?: IDBObjectStore
   ) => Promise<boolean>;
 }
 

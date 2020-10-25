@@ -1,7 +1,7 @@
 import {
   flagIndex,
   InternalStoreEntry,
-  SCHEMA,
+  SCHEMA, StoreIndex,
   StoreSchema
 } from './store-schema';
 import { CheckApi } from './check-api';
@@ -12,7 +12,7 @@ export function isDeleted<T>({ flag }: T & { flag?: string }): boolean {
 }
 
 export function isOnlineSupport(object: any): object is CheckApi {
-  return !!object.isOnline;
+  return object.hasOwnProperty('isOnline');
 }
 
 export function generateTempKey({ dbName, store }: StoreSchema): string {
@@ -40,13 +40,21 @@ export function prepareStoreWithDatabase(
         [flagIndex, ...indices].forEach(({ name, keyPath = name, unique }) =>
           idbObjectStore.createIndex(name, keyPath, { unique })
         );
-      } else if (
-        schema.onUpgradeNeeded &&
-        (await schema.onUpgradeNeeded(db, evt))
-      ) {
-        resolve(db);
+      } else if (schema.onUpgradeNeeded) {
+        const migrated = await schema.onUpgradeNeeded(db, evt, req.transaction?.objectStore(store));
+        if (migrated) {
+          console.info(`${dbName}:${store} migrated to ${dbVersion}`);
+        } else {
+          console.info(`${dbName}:${store} migration failed`);
+        }
+      } else if (req.transaction) {
+        const idbObjectStore = req.transaction!.objectStore(store);
+        const { toAdd, toRemove } = evaluateNewAndRemovedIndices(getCurrentIndices(idbObjectStore), schema.indices);
+        toAdd.forEach(({ name, keyPath = name, unique }) =>
+          idbObjectStore.createIndex(name, keyPath, { unique })
+        );
+        toRemove.forEach((index) => idbObjectStore.deleteIndex(index));
       } else {
-        console.log({schema});
         reject('illegal state');
       }
     };
@@ -76,4 +84,23 @@ export function evaluateDbVersion(
     (version, schema) => schema.dbName === dbName ? version + schema.indexedIn : version,
     0
   );
+}
+
+function getCurrentIndices(idbObjectStore: IDBObjectStore): string[] {
+  const indices: string[] = [];
+  for (let i = 0; i < idbObjectStore.indexNames.length; i++) {
+    const index = idbObjectStore.indexNames.item(i);
+    if (index != null) {
+      indices.push(index);
+    }
+  }
+  return indices;
+}
+
+function evaluateNewAndRemovedIndices(currentIndices: string[], schemaIndices: StoreIndex[]): {toAdd: StoreIndex[], toRemove: string[]} {
+  const shouldKnownIndices = schemaIndices.map(({name}) => name);
+  return {
+    toAdd: schemaIndices.filter(({name}) => !currentIndices.includes(name)),
+    toRemove: currentIndices.filter((index) => !shouldKnownIndices.includes(index))
+  };
 }
