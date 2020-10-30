@@ -1,7 +1,8 @@
 import {
-  flagIndex,
+  FLAG_INDEX,
   InternalStoreEntry,
-  SCHEMA, StoreIndex,
+  SCHEMA,
+  StoreIndex,
   StoreSchema
 } from './store-schema';
 import { CheckApi } from './check-api';
@@ -31,29 +32,41 @@ export function prepareStoreWithDatabase(
     openDatabase?.close();
     const req = indexedDB.open(dbName, dbVersion);
     req.onsuccess = () => resolve(req.result);
-    req.onblocked = (err) => reject(err);
-    req.onerror = (err) => reject(err);
+    req.onblocked = err => reject(err);
+    req.onerror = err => reject(err);
     req.onupgradeneeded = async (evt: IDBVersionChangeEvent) => {
       const db: IDBDatabase = req.result;
       if (evt.oldVersion < 1 || !db.objectStoreNames.contains(store)) {
         const idbObjectStore = db.createObjectStore(store, { keyPath });
-        [flagIndex, ...indices].forEach(({ name, keyPath = name, unique }) =>
+        [FLAG_INDEX, ...indices].forEach(({ name, keyPath = name, unique }) =>
           idbObjectStore.createIndex(name, keyPath, { unique })
         );
       } else if (schema.onUpgradeNeeded) {
-        const migrated = await schema.onUpgradeNeeded(db, evt, req.transaction?.objectStore(store));
-        if (migrated) {
-          console.info(`${dbName}:${store} migrated to ${dbVersion}`);
-        } else {
-          console.info(`${dbName}:${store} migration failed`);
+        try {
+          const migrated = await schema.onUpgradeNeeded(
+            db,
+            evt,
+            req.transaction?.objectStore(store)
+          );
+          if (migrated) {
+            console.info(`${dbName}:${store} migrated to ${dbVersion}`);
+          } else {
+            console.info(`${dbName}:${store} migration failed`);
+          }
+        } catch (err) {
+          console.error(`error while migration of ${dbName}:${store}`, err);
+          reject('migration failed');
         }
       } else if (req.transaction) {
-        const idbObjectStore = req.transaction!.objectStore(store);
-        const { toAdd, toRemove } = evaluateNewAndRemovedIndices(getCurrentIndices(idbObjectStore), schema.indices);
+        const idbObjectStore = req.transaction.objectStore(store);
+        const { toAdd, toRemove } = evaluateNewAndRemovedIndices(
+          getCurrentIndices(idbObjectStore),
+          schema.indices
+        );
         toAdd.forEach(({ name, keyPath = name, unique }) =>
           idbObjectStore.createIndex(name, keyPath, { unique })
         );
-        toRemove.forEach((index) => idbObjectStore.deleteIndex(index));
+        toRemove.forEach(indexName => idbObjectStore.deleteIndex(indexName));
       } else {
         reject('illegal state');
       }
@@ -62,14 +75,14 @@ export function prepareStoreWithDatabase(
 }
 
 export async function initGeneralDb(): Promise<{
-  database: Database<InternalStoreEntry>,
-  db: IDBDatabase
+  database: Database<InternalStoreEntry>;
+  db: IDBDatabase;
 }> {
   const db = await prepareStoreWithDatabase(SCHEMA);
   return {
     db,
     database: new Database<InternalStoreEntry>(
-      db.transaction(SCHEMA.store,'readwrite').objectStore(SCHEMA.store),
+      db.transaction(SCHEMA.store, 'readwrite').objectStore(SCHEMA.store),
       '__GENERAL__',
       SCHEMA
     )
@@ -81,7 +94,8 @@ export function evaluateDbVersion(
   dbName: string
 ): number {
   return schemas.reduce(
-    (version, schema) => schema.dbName === dbName ? version + schema.indexedIn : version,
+    (version, schema) =>
+      schema.dbName === dbName ? version + schema.indexedIn : version,
     0
   );
 }
@@ -97,10 +111,15 @@ function getCurrentIndices(idbObjectStore: IDBObjectStore): string[] {
   return indices;
 }
 
-function evaluateNewAndRemovedIndices(currentIndices: string[], schemaIndices: StoreIndex[]): {toAdd: StoreIndex[], toRemove: string[]} {
-  const shouldKnownIndices = schemaIndices.map(({name}) => name);
+function evaluateNewAndRemovedIndices(
+  currentIndices: string[],
+  schemaIndices: StoreIndex[]
+): { toAdd: StoreIndex[]; toRemove: string[] } {
+  const shouldKnownIndices = schemaIndices.map(({ name }) => name);
   return {
-    toAdd: schemaIndices.filter(({name}) => !currentIndices.includes(name)),
-    toRemove: currentIndices.filter((index) => !shouldKnownIndices.includes(index))
+    toAdd: schemaIndices.filter(({ name }) => !currentIndices.includes(name)),
+    toRemove: currentIndices.filter(
+      index => !shouldKnownIndices.includes(index)
+    )
   };
 }

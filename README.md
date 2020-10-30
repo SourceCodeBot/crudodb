@@ -48,46 +48,6 @@ There are 3 flags to mark an item in indexeddb for processing.
 + U
 + D
 
-
 ## Recommendations
 
-### Angular
-
-```typescript
-@Injectable({providedIn: 'root'})
-export class StoreAccessService {
-
-    public instance$ = fromPromise(CrudoDb.setup)
-        .pipe(shareReplay(1));
-
-}
-
-@Injectable({providedIn: 'root'})
-export class DaoService {
-
-    private key$ = this.storeAccess.instance$.pipe(
-        switchMap((instance) => instance.registerSchema({schema})),
-        shareReplay(1)
-    );
-
-    private handle$ = combineLatest([this.key$, this.storeAccess.instance$]).pipe(shareReplay(1));
-
-    constructor(private storeAccess: StoreAccessService) {}
-
-    public create(item: Dao): Observable<Dao> {
-        return this.handle$.pipe(
-            switchMap(([key, instance]) => instance.create(key, item))
-        );
-    }
-}
-
-```
-
-### React (Hooks API)
-
-```typescript jsx
-
-// TODO: write hook(context) for it
-
- 
-```
+see [documentation](docs) for angular and react recommendations.

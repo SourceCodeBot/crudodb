@@ -1,8 +1,4 @@
-import {
-  generateTempKey,
-  isDeleted,
-  isOnlineSupport
-} from '../src/utils';
+import { generateTempKey, isDeleted, isOnlineSupport } from '../src/utils';
 import { StoreSchema } from '../src';
 
 jest.useFakeTimers();

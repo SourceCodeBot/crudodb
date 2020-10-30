@@ -36,7 +36,8 @@ export interface StoreSchema {
   ) => Promise<boolean>;
 }
 
-export interface InternalStoreEntry extends Omit<StoreSchema, 'onUpgradeNeeded'> {
+export interface InternalStoreEntry
+  extends Omit<StoreSchema, 'onUpgradeNeeded'> {
   id: string;
   // version of database for StoreSchema#dbVersion
   indexedIn: number;
@@ -57,6 +58,6 @@ export const SCHEMA: StoreSchema = {
   store: 'stores'
 };
 
-export const flagIndex: StoreIndex = {
+export const FLAG_INDEX: StoreIndex = {
   name: 'flag'
 };
