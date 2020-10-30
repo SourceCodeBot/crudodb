@@ -15,7 +15,6 @@ interface RegisterSchemaArgs<T> {
 }
 
 export class CrudoDb {
-
   static async setup(debug: boolean = false): Promise<CrudoDb> {
     const instance = new CrudoDb(debug);
     if (debug) {
@@ -44,7 +43,7 @@ export class CrudoDb {
   private constructor(private debug: boolean = false) {}
 
   public close(): void {
-    Object.values(this.idbDatabases).forEach((db) => db.close());
+    Object.values(this.idbDatabases).forEach(db => db.close());
   }
 
   public async get<T>(
@@ -81,54 +80,63 @@ export class CrudoDb {
     }
   }
 
-  public async registerSchema<T>(args: RegisterSchemaArgs<T>): Promise<string | undefined> {
+  public async registerSchema<T>(
+    args: RegisterSchemaArgs<T>
+  ): Promise<string | undefined> {
     const { schema, schemaKey } = args;
     const key = schemaKey ?? generateTempKey(schema);
     const indexedSchema = await this.general.get(key);
 
     if (indexedSchema) {
-       if (indexedSchema.indexedIn === schema.dbVersion) {
-         if (!this.databases[key]) {
-           const db = await prepareStoreWithDatabase(indexedSchema, this.idbDatabases[schema.dbName]);
-           this.databases[key] = new Database<unknown>(
-             db.transaction(schema.store, 'readwrite')
-               .objectStore(schema.store),
-             key,
-             schema,
-             args.api
-           );
-         }
-         return key;
-       }
-       const db = await upgradeExistingSchema(
-         this.general,
-         {
-           ...indexedSchema,
-           ...schema,
-           indexedIn: schema.dbVersion
-         },
-         this.idbDatabases[indexedSchema.dbName]
-       );
-       this.idbDatabases[indexedSchema.dbName] = db;
-       this.databases[key] = new Database<unknown>(
-         db.transaction(schema.store, 'readwrite')
-           .objectStore(schema.store),
-         key,
-         schema,
-         args.api
-       );
-       return key;
+      if (indexedSchema.indexedIn === schema.dbVersion) {
+        if (!this.databases[key]) {
+          const db = await prepareStoreWithDatabase(
+            indexedSchema,
+            this.idbDatabases[schema.dbName]
+          );
+          this.idbDatabases[schema.dbName] = db;
+          this.databases[key] = new Database<unknown>(
+            db.transaction(schema.store, 'readwrite').objectStore(schema.store),
+            key,
+            schema,
+            args.api
+          );
+        }
+        return key;
+      }
+      const db = await upgradeExistingSchema(
+        this.general,
+        {
+          ...indexedSchema,
+          ...schema,
+          indexedIn: schema.dbVersion
+        },
+        this.idbDatabases[indexedSchema.dbName]
+      );
+      this.idbDatabases[indexedSchema.dbName] = db;
+      this.databases[key] = new Database<unknown>(
+        db.transaction(schema.store, 'readwrite').objectStore(schema.store),
+        key,
+        schema,
+        args.api
+      );
+      return key;
     }
 
     const items = await this.general.getAll();
-    const itemsToUpdate = items.filter(({ dbName}) => dbName === schema.dbName);
+    const itemsToUpdate = items.filter(
+      ({ dbName }) => dbName === schema.dbName
+    );
     const currentVersion = evaluateDbVersion(itemsToUpdate, schema.dbName);
     const version = currentVersion + schema.dbVersion;
 
-    const db = await prepareStoreWithDatabase({
-      ...schema,
-      dbVersion: version
-    }, this.idbDatabases[schema.dbName]);
+    const db = await prepareStoreWithDatabase(
+      {
+        ...schema,
+        dbVersion: version
+      },
+      this.idbDatabases[schema.dbName]
+    );
     this.idbDatabases[schema.dbName] = db;
 
     const indexedEntry = await this.general.create({
@@ -142,18 +150,19 @@ export class CrudoDb {
     }
     this.databaseSchemas[key] = indexedEntry;
     this.databases[key] = new Database<unknown>(
-      db.transaction(schema.store, 'readwrite')
-        .objectStore(schema.store),
+      db.transaction(schema.store, 'readwrite').objectStore(schema.store),
       key,
       schema,
       args.api
     );
 
     await Promise.all(
-      itemsToUpdate.map((item) => ({
-        ...item,
-        dbVersion: version
-      })).map((item) => this.general.update(item))
+      itemsToUpdate
+        .map(item => ({
+          ...item,
+          dbVersion: version
+        }))
+        .map(item => this.general.update(item))
     );
 
     return key;
@@ -172,11 +181,20 @@ export class CrudoDb {
   }
 
   public async sync(schemaKey?: string[]): Promise<void> {
-    const toUpdate = schemaKey ? Object.entries(this.databases).filter(([key, _]) => schemaKey.includes(key)) : Object.entries(this.databases);
+    const toUpdate = schemaKey
+      ? Object.entries(this.databases).filter(([key, _]) =>
+          schemaKey.includes(key)
+        )
+      : Object.entries(this.databases);
+
     await Promise.all(
-      toUpdate.map(([key, db]) => db.sync().catch((err) =>
-        console.warn(`db with key ${key} failed to sync`, err)
-      ))
+      toUpdate.map(async ([key, db]) => {
+        try {
+          await db.sync();
+        } catch (err) {
+          console.warn(`db with key ${key} failed to sync`, err);
+        }
+      })
     );
   }
 }
@@ -187,14 +205,16 @@ async function upgradeExistingSchema(
   openDatabase?: IDBDatabase
 ): Promise<IDBDatabase> {
   const databases = await general.getAll();
-  const internals = databases.filter(({ dbName }) => dbName === indexedSchema.dbName);
+  const internals = databases.filter(
+    ({ dbName }) => dbName === indexedSchema.dbName
+  );
   const version = evaluateDbVersion(internals, indexedSchema.dbName);
-  const withNewVersion = internals.map((item) => ({
+  const withNewVersion = internals.map(item => ({
     ...item,
     dbVersion: version
   }));
   const db = await prepareStoreWithDatabase(indexedSchema, openDatabase);
-  await Promise.all(withNewVersion.map((item) => general.update(item)));
+  await Promise.all(withNewVersion.map(item => general.update(item)));
   await general.update(indexedSchema);
   return db;
 }

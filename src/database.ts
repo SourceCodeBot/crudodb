@@ -5,7 +5,6 @@ import { CrudApi } from './crud-api';
 type WithFlag<T> = T & { flag?: string };
 
 export class Database<T> {
-
   constructor(
     private objectStore: IDBObjectStore,
     private key: string,
@@ -18,9 +17,8 @@ export class Database<T> {
    */
   public async sync(): Promise<void> {
     type F = WithFlag<T>;
-    const isOnline = this.api && isOnlineSupport(this.api)
-      ? await this.api.isOnline()
-      : true;
+    const isOnline =
+      this.api && isOnlineSupport(this.api) ? await this.api.isOnline() : true;
     if (!isOnline) {
       return;
     }
@@ -60,7 +58,7 @@ export class Database<T> {
   public get(id: T[keyof T]): Promise<T | undefined> {
     return new Promise((resolve, reject) => {
       this.prepareTransaction();
-      const request = this.objectStore.get(id as unknown as IndexedKey);
+      const request = this.objectStore.get((id as unknown) as IndexedKey);
       request.onerror = err => reject(err);
       request.onsuccess = async () => {
         const result = request.result;
@@ -115,7 +113,7 @@ export class Database<T> {
   public create(item: T): Promise<T | undefined> {
     return this.createLocal(item)
       .catch(() => undefined)
-      .then((entity) => entity && this.createRemote(entity).catch(() => entity));
+      .then(entity => entity && this.createRemote(entity).catch(() => entity));
   }
 
   /**
@@ -125,7 +123,7 @@ export class Database<T> {
   public update(item: T): Promise<T | undefined> {
     return this.updateLocal(item)
       .catch(() => undefined)
-      .then((entity) => entity && this.updateRemote(entity).catch(() => entity));
+      .then(entity => entity && this.updateRemote(entity).catch(() => entity));
   }
 
   /**
@@ -134,8 +132,9 @@ export class Database<T> {
    */
   public delete(item: T): Promise<boolean> {
     return this.getId(item, (id: T[keyof T]) =>
-      this.deleteLocal(id, item)
-        .then((result) => result && this.deleteRemote(id, item))
+      this.deleteLocal(id, item).then(
+        result => result && this.deleteRemote(id, item)
+      )
     ).catch(() => false);
   }
 
@@ -163,7 +162,8 @@ export class Database<T> {
     const deleteLocalIds = deleteLocal.map(idFn);
 
     const updateLocal = fromRemote.filter(
-      (item) => localIds.includes(idFn(item)) && !deleteLocalIds.includes(idFn(item))
+      item =>
+        localIds.includes(idFn(item)) && !deleteLocalIds.includes(idFn(item))
     );
 
     createLocal.forEach(item =>
@@ -202,8 +202,8 @@ export class Database<T> {
       return await this.api
         .create(schemaConform(item, this.schema.indices))
         .then(async (result: T | undefined) => {
-          const deleted = await this.getId(item,
-            (id: T[keyof T]) => this.deleteLocal(id, item, false)
+          const deleted = await this.getId(item, (id: T[keyof T]) =>
+            this.deleteLocal(id, item, false)
           ).catch(() => false);
           return deleted && result
             ? this.createLocal(result, false)
@@ -224,13 +224,16 @@ export class Database<T> {
     item: T,
     addFlag: boolean = true
   ): Promise<T | undefined> {
-    const entity = await this.getId(item, (id) => this.get(id));
+    const entity = await this.getId(item, id => this.get(id));
     const localItem: T & { flag: string } = {
       ...schemaConform(item, this.schema.indices),
       flag: addFlag ? evaluateUpdateFlag(entity) : ''
     };
     this.prepareTransaction();
-    return entity && await handleRequest(this.objectStore.put(localItem), localItem);
+    return (
+      entity &&
+      (await handleRequest(this.objectStore.put(localItem), localItem))
+    );
   }
 
   private async updateRemote(item: T): Promise<T | undefined> {
@@ -243,7 +246,10 @@ export class Database<T> {
     if (isOnline === undefined || isOnline) {
       return this.api
         .update(item)
-        .then(async (result: T | undefined) => result && await this.updateLocal(result, false))
+        .then(
+          async (result: T | undefined) =>
+            result && (await this.updateLocal(result, false))
+        )
         .catch(err => {
           console.error(
             `can't call update of api ${buildEntityIdent(this.schema)}`,
@@ -262,17 +268,26 @@ export class Database<T> {
   ): Promise<boolean> {
     this.prepareTransaction();
     if (!addFlag) {
-      return handleRequest(this.objectStore.delete(id as unknown as IndexedKey), item)
+      return handleRequest(
+        this.objectStore.delete((id as unknown) as IndexedKey),
+        item
+      )
         .then(() => true)
         .catch(() => false);
     }
-    return this.get(id as unknown as T[keyof T])
-      .then((entity) => entity && handleRequest(this.objectStore.put({
-        ...entity,
-        flag: 'D'
-      }), true)
-    )
-      .then((res) => res === undefined ? false : res);
+    return this.get((id as unknown) as T[keyof T])
+      .then(
+        entity =>
+          entity &&
+          handleRequest(
+            this.objectStore.put({
+              ...entity,
+              flag: 'D'
+            }),
+            true
+          )
+      )
+      .then(res => (res === undefined ? false : res));
   }
 
   private async deleteRemote(id: T[keyof T], item: T): Promise<boolean> {
@@ -285,8 +300,9 @@ export class Database<T> {
     if (isOnline === undefined || isOnline) {
       return this.api
         .delete(item)
-        .then(async (deleted: boolean) =>
-          deleted && (await this.deleteLocal(id, item, false))
+        .then(
+          async (deleted: boolean) =>
+            deleted && (await this.deleteLocal(id, item, false))
         )
         .catch(err => {
           console.error(
@@ -368,7 +384,8 @@ function getValue<T, K extends keyof T>(obj: T, key: K): T[K] {
 
 function renewStore(objectStore: IDBObjectStore): IDBObjectStore {
   const db = objectStore.transaction.db;
-  return db.transaction(objectStore.name, 'readwrite')
+  return db
+    .transaction(objectStore.name, 'readwrite')
     .objectStore(objectStore.name);
 }
 
@@ -382,5 +399,5 @@ function schemaConform<T, K extends keyof T>(
 ): T {
   const keys: K[] = indices.map(({ name }) => name as K);
   const entries: [K, T[K]][] = keys.map(key => [key, item[key as K]]);
-  return Object.fromEntries(entries) as unknown as T;
+  return (Object.fromEntries(entries) as unknown) as T;
 }

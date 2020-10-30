@@ -1,5 +1,5 @@
-import {CrudApi} from "../src";
-import {CheckApi} from "../src/check-api";
+import { CrudApi } from '../src';
+import { CheckApi } from '../src/check-api';
 
 export interface Dao {
   id?: string;
@@ -46,7 +46,6 @@ export class DaoApi implements CrudApi<Dao> {
 }
 
 export class DaoApiWithApiState extends DaoApi implements CheckApi {
-
   constructor(public _isOnline: boolean = false) {
     super();
   }
@@ -59,7 +58,6 @@ export class DaoApiWithApiState extends DaoApi implements CheckApi {
     return Promise.resolve(this._isOnline);
   }
 }
-
 
 export function createDao(prefix: string): Dao {
   return {

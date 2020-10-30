@@ -1,3 +1,0 @@
-# Database index documentation
-
-# todo

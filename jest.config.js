@@ -3,5 +3,6 @@
 
 module.exports = {
   preset: 'jest-preset-typescript',
-  setupFiles: ['fake-indexeddb/auto']
+  setupFiles: ['fake-indexeddb/auto'],
+  coveragePathIgnorePatterns: ['/node_modules/', '/spec/']
 };

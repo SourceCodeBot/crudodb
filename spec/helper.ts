@@ -1,6 +1,9 @@
-import {StoreSchema} from "../src";
+import { StoreSchema } from '../src';
 
-export function unload(dbName: string, secondRun: boolean = false): Promise<boolean> {
+export function unload(
+  dbName: string,
+  secondRun: boolean = false
+): Promise<boolean> {
   return new Promise((resolve, reject) => {
     const request = indexedDB.deleteDatabase(dbName);
     request.onblocked = () => reject(`blocked ${dbName}`);
@@ -9,7 +12,7 @@ export function unload(dbName: string, secondRun: boolean = false): Promise<bool
     request.onerror = () => reject('error');
   })
     .then(() => true)
-    .catch(async (err) => {
+    .catch(async err => {
       console.error('unload failed', err);
       if (secondRun) {
         return false;

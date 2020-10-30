@@ -6,7 +6,5 @@
   },
   "include": ["**/*.ts", "**/*.d.ts"],
   "exclude": ["**/*.spec.ts"],
-  "files": [
-    "index.ts"
-  ]
+  "files": ["index.ts"]
 }

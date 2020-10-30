@@ -1,3 +1,0 @@
-# Database api documentation
-
-# todo

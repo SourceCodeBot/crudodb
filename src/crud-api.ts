@@ -1,4 +1,3 @@
-
 export interface CrudApi<T> {
   /**
    * that function should be able to persist an new entity and return it.
