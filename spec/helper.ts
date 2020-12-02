@@ -8,7 +8,7 @@ export function unload(
     const request = indexedDB.deleteDatabase(dbName);
     request.onblocked = () => reject(`blocked ${dbName}`);
     request.onupgradeneeded = () => reject('upgradeneeded');
-    request.onsuccess = () => resolve();
+    request.onsuccess = () => resolve(true);
     request.onerror = () => reject('error');
   })
     .then(() => true)
