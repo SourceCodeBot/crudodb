@@ -2,7 +2,7 @@ name: Build and publish crudodb
 
 on:
   push:
-    branches: [master]
+    branches: [main, next]
 jobs:
   release:
     runs-on: ubuntu-latest
