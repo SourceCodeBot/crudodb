@@ -27,6 +27,8 @@ describe('#crudoDb', () => {
   });
 
   console.debug = jest.fn();
+  console.error = jest.fn();
+  console.info = jest.fn();
   console.time = jest.fn();
   console.timeEnd = jest.fn();
 
@@ -57,13 +59,17 @@ describe('#crudoDb', () => {
       it('should register first schema in database painless', async () => {
         test = 'shouldregisterfirstschemaindatabasepainless';
         const schema = createSchema({ dbName: test });
+
         const schemaKey = await instance.registerSchema({
           schema
         });
+
         expect(schemaKey).toEqual(
           `custom_schema:${schema.dbName}:${schema.store}`
         );
+
         const indexedSchemas = await instance.getAll(SCHEMA_KEY);
+
         expect(indexedSchemas).not.toBeUndefined();
         expect(indexedSchemas).toHaveLength(1);
       });
@@ -123,7 +129,6 @@ describe('#crudoDb', () => {
 
       it('should register multiple schemas painless', async () => {
         test = 'shouldregistermultipleschemaspainless';
-
         const schemaA = createSchema({ dbName: `${test}-A` });
         const schemaB = createSchema({ dbName: `${test}-B` });
         const schemaC10 = createSchema({ dbName: `${test}-C`, dbVersion: 10 });
@@ -180,6 +185,7 @@ describe('#crudoDb', () => {
             keyPath: undefined
           }
         ];
+
         expect(indexedSchemas).toEqual(expectedEntries);
       });
     });
@@ -187,7 +193,6 @@ describe('#crudoDb', () => {
     describe('#register existing schema with update', () => {
       it('should register existing schemas with updated version painless', async () => {
         test = 'shouldregisterexistingschemaswithupdatedversionpainless';
-
         await instance.registerSchema({
           schema: createSchema({ dbName: test })
         });
@@ -289,7 +294,9 @@ describe('#crudoDb', () => {
       if (!key) {
         fail('no key');
       }
+
       const entity = await instance.get<Dao>(key, dao.id);
+
       expect(entity).toEqual(dao);
     });
 
@@ -312,8 +319,10 @@ describe('#crudoDb', () => {
       if (!key) {
         fail('no key');
       }
+
       const dao = createDao(test);
       const entity = await instance.create<Dao>(key, dao);
+
       expect(entity).toEqual({
         ...dao,
         flag: 'C'
@@ -343,7 +352,9 @@ describe('#crudoDb', () => {
       if (!key) {
         fail('no key');
       }
+
       const entity = await instance.update<Dao>(key, dao);
+
       expect(entity).toEqual({
         ...dao,
         flag: ''
@@ -373,7 +384,9 @@ describe('#crudoDb', () => {
       if (!key) {
         fail('no key');
       }
+
       const result = await instance.delete<Dao>(key, dao);
+
       expect(result).toEqual(true);
     });
 
@@ -404,7 +417,9 @@ describe('#crudoDb', () => {
         schema: createSchema({ dbName: `${test}-2` }),
         api: mockApi
       });
+
       await instance.sync([key]);
+
       expect(mockApi.getAll).toHaveBeenCalledTimes(2);
     });
 
@@ -419,8 +434,43 @@ describe('#crudoDb', () => {
         schema: createSchema({ dbName: `${test}-2` }),
         api: mockApi
       });
+
       await instance.sync();
+
       expect(mockApi.getAll).toHaveBeenCalledTimes(4);
+    });
+  });
+
+  describe('#applySchema', () => {
+    it('should build and return a new StoreApi instance', async () => {
+      test = 'shouldbuildandreturnanewStoreApiinstance';
+      const schema = createSchema({ dbName: test });
+
+      const storeApi = await instance.applySchema({
+        schema
+      });
+
+      expect(storeApi).toBeTruthy();
+      const indexedSchemas = await instance.getAll(SCHEMA_KEY);
+      expect(indexedSchemas).not.toBeUndefined();
+      expect(indexedSchemas).toHaveLength(1);
+    });
+
+    it('should return a existing StoreApi instance', async () => {
+      test = 'shouldreturnaexistingStoreApiinstance';
+      const schema = createSchema({ dbName: test });
+      await instance.applySchema({
+        schema
+      });
+
+      const storeApi = await instance.applySchema({
+        schema
+      });
+
+      expect(storeApi).toBeTruthy();
+      const indexedSchemas = await instance.getAll(SCHEMA_KEY);
+      expect(indexedSchemas).not.toBeUndefined();
+      expect(indexedSchemas).toHaveLength(1);
     });
   });
 });

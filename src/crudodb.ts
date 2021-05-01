@@ -7,6 +7,7 @@ import {
   initGeneralDb,
   prepareStoreWithDatabase
 } from './utils';
+import { StoreApi } from './store-api';
 
 interface RegisterSchemaArgs<T> {
   schema: StoreSchema;
@@ -34,11 +35,13 @@ export class CrudoDb {
 
   private databases: Record<string, Database<unknown>> = {};
 
+  private idbDatabases: Record<string, IDBDatabase> = {};
+
+  private storeApis: Record<string, StoreApi<unknown>> = {};
+
   private get general(): Database<InternalStoreEntry> {
     return this.databases.general as Database<InternalStoreEntry>;
   }
-
-  private idbDatabases: Record<string, IDBDatabase> = {};
 
   private constructor(private debug: boolean = false) {}
 
@@ -80,9 +83,7 @@ export class CrudoDb {
     }
   }
 
-  public async registerSchema<T>(
-    args: RegisterSchemaArgs<T>
-  ): Promise<string | undefined> {
+  public async registerSchema<T>(args: RegisterSchemaArgs<T>): Promise<string> {
     const { schema, schemaKey } = args;
     const key = schemaKey ?? generateTempKey(schema);
     const indexedSchema = await this.general.get(key);
@@ -146,7 +147,7 @@ export class CrudoDb {
       id: key
     });
     if (!indexedEntry) {
-      return;
+      throw new Error("can't create internal entry to manage you schema.");
     }
     this.databaseSchemas[key] = indexedEntry;
     this.databases[key] = new Database<unknown>(
@@ -168,6 +169,19 @@ export class CrudoDb {
     return key;
   }
 
+  public async applySchema<T>(
+    args: RegisterSchemaArgs<T>
+  ): Promise<StoreApi<T>> {
+    const { schema, schemaKey } = args;
+    const key = schemaKey ?? generateTempKey(schema);
+    if (this.storeApis[key]) {
+      return this.storeApis[key] as StoreApi<T>;
+    }
+    const internalKey = await this.registerSchema(args);
+    this.storeApis[internalKey] = new StoreApi<T>(this, internalKey);
+    return this.storeApis[internalKey] as StoreApi<T>;
+  }
+
   private async setup(): Promise<void> {
     const start = +new Date();
     const { db, database } = await initGeneralDb();
@@ -180,6 +194,10 @@ export class CrudoDb {
     }
   }
 
+  /**
+   * call this method to keep your database sync with your api.
+   * @param schemaKey
+   */
   public async sync(schemaKey?: string[]): Promise<void> {
     const toUpdate = schemaKey
       ? Object.entries(this.databases).filter(([key, _]) =>

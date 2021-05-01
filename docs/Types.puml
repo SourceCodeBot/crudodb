@@ -38,6 +38,12 @@ interface CheckApiOnline {
   isOnline(): Promise<boolean>
 }
 
+interface RegisterSchemaArgs<T> {
+  StoreSchema schema
+  CrudApi<T>? api
+  string? schemaKey
+}
+
 class Database<T> {
   string key
   CrudApi<T>? api
@@ -46,17 +52,27 @@ class Database<T> {
 
 class CrudoDb {
   Record<string, Database> databases
+  Record<string, StoreApi> storeApis
 
-  addDatabase(db: Database<T>): void
   gets<T>(schemaKey: string): Promise<T[]>
-  get<T>(id: Key, schemaKey: string): Promise<T|undefined>
-  create<T>(obj: T, schemaKey: string): Promise<T|undefined>
-  update<T>(obj: T, schemaKey: string): Promise<T|undefined>
-  delete<T>(obj: T, schemaKey: string): Promise<boolean>
+  get<T>(schemaKey: string, id: Key): Promise<T|undefined>
+  create<T>(schemaKey: string, obj: T): Promise<T|undefined>
+  update<T>(schemaKey: string, obj: T): Promise<T|undefined>
+  delete<T>(schemaKey: string, obj: T): Promise<boolean>
 
-  goingOnline(): void
-  sync(): void
-  syncDatabase<T>(database: Database<T>): void
+  applySchema<T>(args: RegisterSchemaArgs<T>): Promise<StoreApi<T>>
+  registerSchema<T>(args: RegisterSchemaArgs<T>): Promise<string>
+
+  sync(schemaKeys: string[]): Promise<void>
 }
+
+class StoreApi<T> {
+  CrudoDb db
+  string schemaKey
+
+  sync(): Promise<void>
+}
+
+CrudApi <-- StoreApi
 
 @enduml
