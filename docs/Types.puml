@@ -14,7 +14,7 @@ Key <-- IDBKeyRange
 interface CrudApi<T> {
   create(obj: T): Promise<T|undefined>
   update(obj: T): Promise<T|undefined>
-  delete(obj: T): Promise<boolean>
+  delete(obj: T): Promise<void>
   get(id: Key): Promise<T|undefined>
   gets(): Promise<T[]>
 }
@@ -58,7 +58,7 @@ class CrudoDb {
   get<T>(schemaKey: string, id: Key): Promise<T|undefined>
   create<T>(schemaKey: string, obj: T): Promise<T|undefined>
   update<T>(schemaKey: string, obj: T): Promise<T|undefined>
-  delete<T>(schemaKey: string, obj: T): Promise<boolean>
+  delete<T>(schemaKey: string, obj: T): Promise<void>
 
   applySchema<T>(args: RegisterSchemaArgs<T>): Promise<StoreApi<T>>
   registerSchema<T>(args: RegisterSchemaArgs<T>): Promise<string>

@@ -1,5 +1,4 @@
-import { CrudApi } from '../src';
-import { CheckApi } from '../src/check-api';
+import { CheckApi, CrudApi } from '../src';
 
 export interface Dao {
   id?: string;
@@ -10,14 +9,13 @@ export interface Dao {
 export class DaoApi implements CrudApi<Dao> {
   private storage: Record<string, Dao> = {};
 
-  public delete(obj: Dao): Promise<boolean> {
+  public async delete(obj: Dao): Promise<void> {
     if (obj.id && this.storage[obj.id]) {
       delete this.storage[obj.id];
-      return Promise.resolve(true);
     }
-    return Promise.resolve(false);
   }
-  public create(obj: Dao): Promise<Dao | undefined> {
+
+  public create(obj: Dao): Promise<Dao> {
     if (obj.id) {
       this.storage[obj.id] = obj;
       return Promise.resolve(obj);
@@ -32,7 +30,7 @@ export class DaoApi implements CrudApi<Dao> {
   public getAll(): Promise<Dao[]> {
     return Promise.resolve(Object.values(this.storage));
   }
-  public update(obj: Dao): Promise<Dao | undefined> {
+  public update(obj: Dao): Promise<Dao> {
     if (!obj.id) {
       return Promise.reject('no id');
     }
@@ -46,9 +44,7 @@ export class DaoApi implements CrudApi<Dao> {
 }
 
 export class DaoApiWithApiState extends DaoApi implements CheckApi {
-  constructor(public _isOnline: boolean = false) {
-    super();
-  }
+  public _isOnline: boolean = false;
 
   public setOnline(isOnline: boolean): void {
     this._isOnline = isOnline;

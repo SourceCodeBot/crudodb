@@ -1,5 +1,5 @@
 import { CrudApi, CrudoDb, StoreSchema } from '../src';
-import { BASE_SCHEMA, unload } from './helper';
+import { BASE_SCHEMA, mockConsole, unload } from './helper';
 import { InternalStoreEntry, SCHEMA } from '../src/store-schema';
 import { createDao, Dao, DaoApi } from './dao';
 import { prepareStoreWithDatabase } from '../src/utils';
@@ -26,11 +26,7 @@ describe('#crudoDb', () => {
     }
   });
 
-  console.debug = jest.fn();
-  console.error = jest.fn();
-  console.info = jest.fn();
-  console.time = jest.fn();
-  console.timeEnd = jest.fn();
+  mockConsole();
 
   const mockApi: CrudApi<Dao> = {
     get: jest.fn(),
@@ -373,8 +369,10 @@ describe('#crudoDb', () => {
     });
 
     it('should handle delete request to database', async () => {
+      expect.assertions(1);
       test = 'shouldhandledeleterequesttodatabase';
       const api = new DaoApi();
+      jest.spyOn(api, 'delete');
       const dao = createDao(test);
       await api.create(dao);
       const key = await instance.registerSchema({
@@ -385,9 +383,9 @@ describe('#crudoDb', () => {
         fail('no key');
       }
 
-      const result = await instance.delete<Dao>(key, dao);
+      await instance.delete<Dao>(key, dao);
 
-      expect(result).toEqual(true);
+      expect(api.delete).toHaveBeenCalled();
     });
 
     it('should fail to handle delete request to not existing database', async () => {

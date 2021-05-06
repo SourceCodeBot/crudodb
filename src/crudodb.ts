@@ -72,9 +72,9 @@ export class CrudoDb {
     return (this.databases[schemaKey] as Database<T>).update(item);
   }
 
-  public delete<T>(schemaKey: string, item: T): Promise<boolean> {
+  public async delete<T>(schemaKey: string, item: T): Promise<void> {
     this.validateSchemaKey(schemaKey);
-    return this.databases[schemaKey].delete(item);
+    await this.databases[schemaKey].delete(item);
   }
 
   private validateSchemaKey(key: string): Promise<void> | void {

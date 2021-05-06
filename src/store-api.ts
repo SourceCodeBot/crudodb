@@ -11,8 +11,8 @@ export class StoreApi<T = unknown> implements CrudApi<T> {
     return this.db.create(this.schemaKey, obj);
   }
 
-  public delete(obj: T): Promise<boolean> {
-    return this.db.delete(this.schemaKey, obj);
+  public async delete(obj: T): Promise<void> {
+    await this.db.delete(this.schemaKey, obj);
   }
 
   public get<K extends keyof T>(id: T[K]): Promise<T | undefined> {

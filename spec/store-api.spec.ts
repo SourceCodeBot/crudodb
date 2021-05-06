@@ -87,13 +87,14 @@ describe('#storeApi', () => {
       it('should delete data from db', async () => {
         const { crudoDb, instance } = init();
         const expected: Dao = createDao('delete');
-        crudoDb.delete = jest.fn(
+        const testFn = jest.fn(
           async (k, obj: Dao) => !(k !== key || obj.id !== expected.id)
         );
+        crudoDb.delete = testFn;
 
-        const data = await instance.delete(expected);
+        await instance.delete(expected);
 
-        expect(data).toEqual(true);
+        expect(testFn).toHaveBeenCalledWith(key, expected);
       });
     });
   });
