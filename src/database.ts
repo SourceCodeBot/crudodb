@@ -1,6 +1,6 @@
+import { CrudApi } from './crud-api';
 import { IndexedKey, StoreIndex, StoreSchema } from './store-schema';
 import { assertNotNull, isDeleted, isOnlineSupport } from './utils';
-import { CrudApi } from './crud-api';
 
 type WithFlag<T> = T & { flag?: string };
 
@@ -22,6 +22,7 @@ export class Database<T> {
     if (!isOnline) {
       return;
     }
+
     const localItems = await new Promise<F[]>((resolve, reject) => {
       this.prepareTransaction();
       const req = this.objectStore.index('flag').getAll();
@@ -62,7 +63,7 @@ export class Database<T> {
       const request = this.objectStore.get((id as unknown) as IndexedKey);
       request.onerror = err => reject(err);
       request.onsuccess = async () => {
-        const result = request.result;
+        const {result} = request;
         if (!result && this.api) {
           const isOnline = isOnlineSupport(this.api)
             ? await this.api.isOnline()
@@ -87,7 +88,7 @@ export class Database<T> {
       this.prepareTransaction();
       const request = this.objectStore.getAll();
       request.onsuccess = async () => {
-        const result = request.result;
+        const {result} = request;
         if (result?.length < 1 && this.api) {
           const isOnline = isOnlineSupport(this.api)
             ? await this.api.isOnline()
@@ -176,7 +177,7 @@ export class Database<T> {
     );
   }
 
-  private async createLocal(item: T, addFlag: boolean = true): Promise<T> {
+  private async createLocal(item: T, addFlag = true): Promise<T> {
     const localItem: T & { flag: string } = {
       ...schemaConform(item, this.schema.indices),
       flag: addFlag ? 'C' : ''
@@ -201,14 +202,15 @@ export class Database<T> {
       await this.getId(item, (id: T[keyof T]) =>
         this.deleteLocal(id, item, false)
       );
-      return await this.createLocal(assertNotNull(result), false);
+      const entity = await this.createLocal(assertNotNull(result), false);
+      return assertNotNull(entity);
     }
     return item;
   }
 
   private async updateLocal(
     item: T,
-    addFlag: boolean = true
+    addFlag = true
   ): Promise<T | undefined> {
     const entity = assertNotNull(await this.getId(item, id => this.get(id)));
     const localItem: T & { flag: string } = {
@@ -217,7 +219,11 @@ export class Database<T> {
     };
     this.prepareTransaction();
     assertNotNull(entity);
-    return await handleRequest(this.objectStore.put(localItem), localItem);
+    const fromStorage = await handleRequest(
+      this.objectStore.put(localItem),
+      localItem
+    );
+    return assertNotNull(fromStorage);
   }
 
   private async updateRemote(item: T): Promise<T> {
@@ -247,7 +253,7 @@ export class Database<T> {
   private async deleteLocal(
     id: T[keyof T],
     item: T,
-    addFlag: boolean = true
+    addFlag = true
   ): Promise<void> {
     this.prepareTransaction();
     if (!addFlag) {
@@ -295,7 +301,7 @@ export class Database<T> {
     callback: (id: T[keyof T]) => Promise<S>
   ): Promise<S> {
     const { keyPath = 'id' } = this.schema;
-    if (!(item as any).hasOwnProperty(keyPath)) {
+    if (!item[keyPath as keyof T]) {
       return Promise.reject();
     }
     return callback(getValue(item, keyPath as keyof T));
@@ -350,7 +356,7 @@ function extractIdsList<T, K extends keyof T>(list: T[], key: string): T[K][] {
 }
 
 function logInfo<T>(item: T, error: unknown): void {
-  console.debug(`error while sync`, { item, error });
+  console.info(`error while sync`, { item, error });
 }
 
 function getValue<T, K extends keyof T>(obj: T, key: K): T[K] {
@@ -358,13 +364,13 @@ function getValue<T, K extends keyof T>(obj: T, key: K): T[K] {
 }
 
 function renewStore(objectStore: IDBObjectStore): IDBObjectStore {
-  const db = objectStore.transaction.db;
+  const {db} = objectStore.transaction;
   return db
     .transaction(objectStore.name, 'readwrite')
     .objectStore(objectStore.name);
 }
 
-function evaluateUpdateFlag(entity?: any): string {
+function evaluateUpdateFlag(entity?: unknown & { flag?: string }): string {
   return entity && entity.flag === 'C' ? 'C' : 'U';
 }
 

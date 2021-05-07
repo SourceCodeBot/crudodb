@@ -1,5 +1,5 @@
-import { CrudoDb } from './crudodb';
 import { CrudApi } from './crud-api';
+import { CrudoDb } from './crudodb';
 
 /**
  * StoreApi provide access to database by an CrudoDb instance.
@@ -7,7 +7,7 @@ import { CrudApi } from './crud-api';
 export class StoreApi<T = unknown> implements CrudApi<T> {
   constructor(private db: CrudoDb, private schemaKey: string) {}
 
-  public create(obj: T): Promise<T | undefined> {
+  public create(obj: T): Promise<T> {
     return this.db.create(this.schemaKey, obj);
   }
 
@@ -23,7 +23,7 @@ export class StoreApi<T = unknown> implements CrudApi<T> {
     return this.db.getAll(this.schemaKey);
   }
 
-  public update(obj: T): Promise<T | undefined> {
+  public update(obj: T): Promise<T> {
     return this.db.update(this.schemaKey, obj);
   }
 

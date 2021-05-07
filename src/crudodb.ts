@@ -1,13 +1,13 @@
-import { InternalStoreEntry, StoreSchema } from './store-schema';
-import { Database } from './database';
 import { CrudApi } from './crud-api';
+import { Database } from './database';
+import { StoreApi } from './store-api';
+import { InternalStoreEntry, StoreSchema } from './store-schema';
 import {
   evaluateDbVersion,
   generateTempKey,
   initGeneralDb,
   prepareStoreWithDatabase
 } from './utils';
-import { StoreApi } from './store-api';
 
 interface RegisterSchemaArgs<T> {
   schema: StoreSchema;
@@ -16,7 +16,7 @@ interface RegisterSchemaArgs<T> {
 }
 
 export class CrudoDb {
-  static async setup(debug: boolean = false): Promise<CrudoDb> {
+  static async setup(debug = false): Promise<CrudoDb> {
     const instance = new CrudoDb(debug);
     if (debug) {
       console.time('CrudoDb initialized');
@@ -62,12 +62,12 @@ export class CrudoDb {
     return (this.databases[schemaKey] as Database<T>).getAll();
   }
 
-  public create<T>(schemaKey: string, item: T): Promise<T | undefined> {
+  public create<T>(schemaKey: string, item: T): Promise<T> {
     this.validateSchemaKey(schemaKey);
     return (this.databases[schemaKey] as Database<T>).create(item);
   }
 
-  public update<T>(schemaKey: string, item: T): Promise<T | undefined> {
+  public update<T>(schemaKey: string, item: T): Promise<T> {
     this.validateSchemaKey(schemaKey);
     return (this.databases[schemaKey] as Database<T>).update(item);
   }
@@ -183,13 +183,13 @@ export class CrudoDb {
   }
 
   private async setup(): Promise<void> {
-    const start = +new Date();
+    const start = Number(new Date());
     const { db, database } = await initGeneralDb();
     this.databases.general = database as Database<unknown>;
     this.idbDatabases['__GENERAL__'] = db;
     if (this.debug) {
-      console.debug('synced databases', {
-        took: +new Date() - start
+      console.info('synced databases', {
+        took: Number(new Date()) - start
       });
     }
   }
