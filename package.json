@@ -12,7 +12,8 @@
     "format:prettier": "prettier --config .prettierrc --write",
     "format:prettier:all": "yarn format:prettier \"**/*.+ts\"",
     "semantic-release": "semantic-release",
-    "lint:es:fix": "yarn eslint --fix"
+    "lint:es:fix": "yarn eslint --fix",
+    "validate": "tsc --noEmit -p src/tsconfig.app.json"
   },
   "repository": {
     "type": "git",
@@ -40,8 +41,10 @@
     "eslint-config-airbnb-base": "^14.2.1",
     "eslint-config-prettier": "^6.10.0",
     "eslint-plugin-ban": "^1.5.1",
+    "eslint-plugin-eslint-comments": "^3.2.0",
     "eslint-plugin-import": "^2.22.1",
     "eslint-plugin-jest": "^24.1.0",
+    "eslint-plugin-promise": "^5.1.0",
     "eslint-plugin-typescript": "^0.14.0",
     "eslint-plugin-unused-imports": "^1.0.0",
     "fake-indexeddb": "^3.0.0",
@@ -50,7 +53,7 @@
     "jest-preset-typescript": "^1.2.0",
     "lint-staged": "^10.5.0",
     "prettier": "^2.1.2",
-    "semantic-release": "^17.2.1",
+    "semantic-release": "^17.4.2",
     "ts-jest": "^26.4.1",
     "tslint": "^6.0.0",
     "tslint-config-airbnb": "^5.11.2",

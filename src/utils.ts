@@ -13,7 +13,7 @@ export function isDeleted<T>({ flag }: T & { flag?: string }): boolean {
 }
 
 export function isOnlineSupport(object: any): object is CheckApi {
-  return object.hasOwnProperty('isOnline');
+  return typeof object.isOnline === 'function';
 }
 
 export function generateTempKey({ dbName, store }: StoreSchema): string {
@@ -122,4 +122,11 @@ function evaluateNewAndRemovedIndices(
       index => !shouldKnownIndices.includes(index)
     )
   };
+}
+
+export function assertNotNull<T = unknown>(obj: T | undefined | null): T {
+  if (obj === null || obj === undefined) {
+    throw new Error('object is null');
+  }
+  return obj;
 }

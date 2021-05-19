@@ -2,25 +2,22 @@ export interface CrudApi<T> {
   /**
    * that function should be able to persist an new entity and return it.
    * otherwise undefined.
-   * @note do not throw errors! there is no error handler. separation of concern!
    * @param obj
    */
-  create(obj: T): Promise<T | undefined>;
+  create(obj: T): Promise<T>;
 
   /**
    * that function should be able to update an existing entity and return it.
    * otherwise undefined.
-   * @note do not throw errors! there is no error handler. separation of concern!
    * @param obj
    */
-  update(obj: T): Promise<T | undefined>;
+  update(obj: T): Promise<T>;
 
   /**
    * that function should be able to remove an existing entity and return successfully or not.
-   * @note do not throw errors! there is no error handler. separation of concern!
    * @param obj
    */
-  delete(obj: T): Promise<boolean>;
+  delete(obj: T): Promise<void>;
 
   /**
    * that function should be able to find and return an existing entity or undefined.

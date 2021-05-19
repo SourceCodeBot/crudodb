@@ -1,12 +1,13 @@
 import { Database } from '../src/database';
-import { CrudApi, StoreSchema } from '../src';
-import { CheckApi } from '../src/check-api';
-import { BASE_SCHEMA, randomString, unload } from './helper';
+import { CrudApi, StoreSchema, CheckApi } from '../src';
+import { BASE_SCHEMA, mockConsole, randomString, unload } from './helper';
 import { createDao, Dao, DaoApi, DaoApiWithApiState } from './dao';
 
 require('fake-indexeddb/auto');
 
 describe('#database', () => {
+  mockConsole();
+
   afterEach(async () => {
     await unload('jest-database');
   });
@@ -127,6 +128,7 @@ describe('#database', () => {
     });
 
     it('should not create local item', async () => {
+      expect.assertions(2);
       const test = 'shouldnotcreatelocalitem';
       const instance = await getDb<Dao>(createSchema(`jest-database-${test}`));
       const dao: Dao = {
@@ -134,9 +136,14 @@ describe('#database', () => {
         id: null!,
         value: 42
       };
-      const entity = await instance.create(dao);
+      try {
+        await instance.create(dao);
+      } catch (e) {
+        expect(e.message).toEqual(
+          'Data provided to an operation does not meet requirements.'
+        );
+      }
       const fromStore = await instance.get(test);
-      expect(entity).toBeUndefined();
       expect(fromStore).toBeUndefined();
     });
 
@@ -153,15 +160,20 @@ describe('#database', () => {
     });
 
     it('should create only local item if api fails', async () => {
+      expect.assertions(2);
       const test = 'shouldcreateonlylocalitemifapifails';
+      const error = new Error('ups');
       const api: Partial<CrudApi<Dao>> = {
-        create: () => {
-          throw new Error('ups');
-        }
+        create: () => Promise.reject(error)
       };
       const schema = createSchema(`jest-database-${test}`);
       const instance = await getDb<Dao>(schema, api as any);
-      const entity = await instance.create(createDao(test));
+      const entity = createDao(test);
+      try {
+        await instance.create(entity);
+      } catch (e) {
+        expect(e).toEqual(error);
+      }
       const fromStore = await instance.get(test);
       expect(fromStore).toEqual({
         ...entity,
@@ -187,14 +199,23 @@ describe('#database', () => {
     });
 
     it('should fail while sync with api', async () => {
+      expect.assertions(2);
       const test = 'shouldfailwhilesyncwithapi';
       const schema = createSchema(`jest-database-${test}`);
+      const error = new Error('ups');
       const api: DaoApi = {
-        create: () => Promise.reject(new Error('ups'))
+        create: () => Promise.reject(error)
       } as any;
       const instance = await getDb<Dao>(schema, api);
       const dao = createDao(test);
-      const entity = await instance.create(dao);
+
+      try {
+        await instance.create(dao);
+      } catch (e) {
+        expect(e).toEqual(error);
+      }
+      const entity = await instance.get(test);
+
       expect(entity).toEqual({
         ...dao,
         flag: 'C'
@@ -203,11 +224,16 @@ describe('#database', () => {
   });
 
   describe('#delete', () => {
-    it('should return false if item not exists', async () => {
+    it('should fail if item not exists', async () => {
+      expect.assertions(1);
       const test = 'shouldreturnfalseifitemnotexists';
       const instance = await getDb<Dao>(createSchema(`jest-database-${test}`));
-      const entity = await instance.delete(createDao(test));
-      expect(entity).toEqual(false);
+
+      try {
+        await instance.delete(createDao(test));
+      } catch {
+        expect(console.error).not.toHaveBeenCalled();
+      }
     });
 
     it('should return true if item exists', async () => {
@@ -218,11 +244,16 @@ describe('#database', () => {
         undefined,
         [dao]
       );
-      const entity = await instance.delete(dao);
-      expect(entity).toEqual(true);
+      try {
+        await instance.delete(dao);
+        expect(console.error).not.toHaveBeenCalled();
+      } catch {
+        fail('operation should not break');
+      }
     });
 
     it('should throw error if key is null', async () => {
+      expect.assertions(1);
       const test = 'shouldthrowerrorifkeyisnull';
       const dao: Dao = {
         id: test,
@@ -230,62 +261,87 @@ describe('#database', () => {
         value: 42
       };
       const instance = await getDb<Dao>(createSchema(`jest-database-${test}`));
-      const entity = await instance.delete(dao);
-      expect(entity).toEqual(false);
+      try {
+        await instance.delete(dao);
+      } catch (e) {
+        expect(e).toEqual(new Error('object is null'));
+      }
     });
 
     it('should return true if item exists and delete remote', async () => {
+      expect.assertions(1);
       const test = 'shouldreturntrueifitemexistsanddeleteremote';
       const dao: Dao = createDao(test);
       const daoApi = new DaoApi();
+      jest.spyOn(daoApi, 'delete');
       await daoApi.create(dao);
       const instance = await getDb<Dao>(
         createSchema(`jest-database-${test}`),
         daoApi,
         [dao]
       );
-      const entity = await instance.delete(dao);
-      expect(entity).toEqual(true);
+
+      try {
+        await instance.delete(dao);
+        expect(daoApi.delete).toHaveBeenCalledWith(dao);
+      } catch (_) {
+        fail('operation failed');
+      }
     });
 
     it('should return false if api fails', async () => {
+      expect.assertions(1);
       const test = 'shouldreturnfalseifapifails';
       const dao: Dao = createDao(test);
+      const error = new Error('ups');
       const api: Partial<CrudApi<Dao>> = {
-        delete: () => Promise.reject(new Error('ups'))
+        delete: () => Promise.reject(error)
       };
       const instance = await getDb<Dao>(
         createSchema(`jest-database-${test}`),
         api as any,
         [dao]
       );
-      const entity = await instance.delete(dao);
-      expect(entity).toEqual(false);
+
+      await instance.delete(dao);
+
+      expect(console.error).toHaveBeenCalledWith(
+        `can't call delete of api jest-database-shouldreturnfalseifapifails:jest`,
+        error
+      );
     });
 
     it('should return true if api is offline', async () => {
       const test = 'shouldreturntrueifapiisoffline';
       const dao: Dao = createDao(test);
       const api: Partial<CrudApi<Dao> & CheckApi> = {
-        isOnline: () => Promise.resolve(false)
+        isOnline: () => Promise.resolve(false),
+        delete: jest.fn()
       };
       const instance = await getDb<Dao>(
         createSchema(`jest-database-${test}`),
         api as any,
         [dao]
       );
-      const entity = await instance.delete(dao);
-      expect(entity).toEqual(true);
+
+      await instance.delete(dao);
+
+      expect(api.delete).not.toHaveBeenCalled();
     });
 
     it('should fail local deletion', async () => {
+      expect.assertions(1);
       const test = 'shouldfaillocaldeletion';
       const instance = await getDb<Dao>(createSchema(`jest-database-${test}`));
-      const entity = await instance.delete({
-        key: `key_${test}`,
-        value: 23
-      });
-      expect(entity).toEqual(false);
+
+      try {
+        await instance.delete({
+          key: `key_${test}`,
+          value: 23
+        });
+      } catch (e) {
+        expect(e).toBeUndefined();
+      }
     });
   });
 
@@ -358,6 +414,25 @@ describe('#database', () => {
           flag: ''
         }
       ]);
+    });
+
+    it('should receive error if api fail', async () => {
+      expect.assertions(1);
+      const test = 'shouldreturnalistofitemsfromapibyloadit';
+      const error = new Error('ups');
+      const api: Partial<CrudApi<Dao>> = {
+        getAll: () => Promise.reject(error)
+      };
+      const instance = await getDb<Dao>(
+        createSchema(`jest-database-${test}`),
+        api as any
+      );
+
+      try {
+        await instance.getAll();
+      } catch (e) {
+        expect(e).toEqual(error);
+      }
     });
 
     it('should return a list of items from api by load it', async () => {
@@ -452,7 +527,14 @@ describe('#database', () => {
       const test = 'shouldnotupdatelocalitem';
       const instance = await getDb<Dao>(createSchema(`jest-database-${test}`));
       const notExisting = createDao(test);
-      const entity = await instance.update(notExisting);
+
+      try {
+        await instance.update(notExisting);
+      } catch (e) {
+        expect(e).toEqual(new Error('object is null'));
+      }
+      const entity = await instance.get(test);
+
       expect(entity).toBeUndefined();
     });
 
@@ -523,13 +605,19 @@ describe('#database', () => {
     });
 
     it('should fail local update', async () => {
+      expect.assertions(2);
       const test = 'shouldfaillocalupdate';
       const instance = await getDb<Dao>(createSchema(`jest-database-${test}`));
       const updated = {
         key: `key_${test}`,
         value: 42
       };
-      const entity = await instance.update(updated);
+      try {
+        await instance.update(updated);
+      } catch (e) {
+        expect(e).toBeUndefined();
+      }
+      const entity = await instance.get(test);
       expect(entity).toBeUndefined();
     });
   });
@@ -646,6 +734,52 @@ describe('#database', () => {
       // remote has items which should updated local
       const shouldLocal666 = await instance.get(remote.id);
       expect(shouldLocal666).toHaveProperty('value', 666);
+    });
+
+    it('should sync deletion against api', async () => {
+      const test = 'shouldsyncdeletionagainstapi';
+      const api = new DaoApiWithApiState();
+      jest.spyOn(api, 'delete');
+      const deleteOne = createDao(`${test}-D`);
+      api.setOnline(true);
+      await api.create(deleteOne);
+      const instance = await getDb<Dao>(
+        createSchema(`jest-database-${test}`),
+        api,
+        [deleteOne]
+      );
+      api.setOnline(false);
+
+      await instance.delete(deleteOne);
+      api.setOnline(true);
+
+      await instance.sync();
+      const entities = await instance.getAll();
+
+      expect(entities).toHaveLength(0);
+      expect(api.delete).toHaveBeenCalledWith(deleteOne);
+    });
+
+    it('should sync updates against api', async () => {
+      const test = 'shouldsyncupdatesagainstapi';
+      const api = new DaoApiWithApiState();
+      jest.spyOn(api, 'update');
+      const updateOne = createDao(`${test}-U`);
+      await api.create(updateOne);
+      const instance = await getDb<Dao>(
+        createSchema(`jest-database-${test}`),
+        api,
+        [updateOne]
+      );
+      await instance.update(updateOne);
+
+      api.setOnline(true);
+
+      await instance.sync();
+      const entities = await instance.getAll();
+
+      expect(entities).toHaveLength(1);
+      expect(api.update).toHaveBeenCalledWith(updateOne);
     });
   });
 });
