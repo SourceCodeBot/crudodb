@@ -10,7 +10,7 @@
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage",
     "format:prettier": "prettier --config .prettierrc --write",
-    "format:prettier:all": "yarn format:prettier \"**/*.+ts\"",
+    "format:prettier:all": "yarn format:prettier \"**/*.ts\"",
     "semantic-release": "semantic-release",
     "lint:es:fix": "yarn eslint --fix",
     "validate": "tsc --noEmit -p src/tsconfig.app.json"

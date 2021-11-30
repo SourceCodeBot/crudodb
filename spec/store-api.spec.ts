@@ -1,5 +1,6 @@
 import { CrudoDb } from '../src';
 import { StoreApi } from '../src/store-api';
+
 import { createDao, Dao } from './dao';
 
 class CrudoDbMock implements Partial<CrudoDb> {
@@ -21,7 +22,7 @@ describe('#storeApi', () => {
 
   function init(): { crudoDb: CrudoDbMock; instance: StoreApi<Dao> } {
     const crudoDb = new CrudoDbMock();
-    const instance = new StoreApi<Dao>((crudoDb as unknown) as CrudoDb, key);
+    const instance = new StoreApi<Dao>(crudoDb as unknown as CrudoDb, key);
     return {
       crudoDb,
       instance

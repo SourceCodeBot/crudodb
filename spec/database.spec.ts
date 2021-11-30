@@ -1,7 +1,8 @@
-import { Database } from '../src/database';
 import { CrudApi, StoreSchema, CheckApi } from '../src';
-import { BASE_SCHEMA, mockConsole, randomString, unload } from './helper';
+import { Database } from '../src/database';
+
 import { createDao, Dao, DaoApi, DaoApiWithApiState } from './dao';
+import { BASE_SCHEMA, mockConsole, randomString, unload } from './helper';
 
 require('fake-indexeddb/auto');
 
@@ -13,7 +14,7 @@ describe('#database', () => {
   });
 
   function initialize(schema: StoreSchema): Promise<IDBObjectStore> {
-    return new Promise(async (resolve, reject) => {
+    return new Promise((resolve, reject) => {
       const req = indexedDB.open(schema.dbName, schema.dbVersion);
       req.onupgradeneeded = () => {
         const { indices, store: storeName, keyPath = 'id' } = schema;
@@ -25,11 +26,9 @@ describe('#database', () => {
         store.transaction.onabort = console.error;
         store.transaction.onerror = console.error;
 
-        [
-          { name: 'flag' },
-          ...indices
-        ].forEach(({ name, keyPath: kP, unique }) =>
-          store.createIndex(name, kP ?? name, { unique })
+        [{ name: 'flag' }, ...indices].forEach(
+          ({ name, keyPath: kP, unique }) =>
+            store.createIndex(name, kP ?? name, { unique })
         );
       };
       req.onsuccess = () => {
@@ -138,10 +137,14 @@ describe('#database', () => {
       };
       try {
         await instance.create(dao);
-      } catch (e) {
-        expect(e.message).toEqual(
-          'Data provided to an operation does not meet requirements.'
-        );
+      } catch (e: unknown) {
+        if (isError(e)) {
+          expect(e.message).toEqual(
+            'Data provided to an operation does not meet requirements.'
+          );
+        } else {
+          fail('type issue');
+        }
       }
       const fromStore = await instance.get(test);
       expect(fromStore).toBeUndefined();
@@ -167,7 +170,7 @@ describe('#database', () => {
         create: () => Promise.reject(error)
       };
       const schema = createSchema(`jest-database-${test}`);
-      const instance = await getDb<Dao>(schema, api as any);
+      const instance = await getDb<Dao>(schema, api as unknown as CrudApi<Dao>);
       const entity = createDao(test);
       try {
         await instance.create(entity);
@@ -188,7 +191,7 @@ describe('#database', () => {
       };
       const instance = await getDb<Dao>(
         createSchema(`jest-database-${test}`),
-        api as any
+        api as unknown as CrudApi<Dao>
       );
       const entity = await instance.create(createDao(test));
       const fromStore = await instance.get(test);
@@ -205,7 +208,7 @@ describe('#database', () => {
       const error = new Error('ups');
       const api: DaoApi = {
         create: () => Promise.reject(error)
-      } as any;
+      } as unknown as DaoApi;
       const instance = await getDb<Dao>(schema, api);
       const dao = createDao(test);
 
@@ -299,7 +302,7 @@ describe('#database', () => {
       };
       const instance = await getDb<Dao>(
         createSchema(`jest-database-${test}`),
-        api as any,
+        api as unknown as CrudApi<Dao>,
         [dao]
       );
 
@@ -320,7 +323,7 @@ describe('#database', () => {
       };
       const instance = await getDb<Dao>(
         createSchema(`jest-database-${test}`),
-        api as any,
+        api as unknown as CrudApi<Dao>,
         [dao]
       );
 
@@ -425,7 +428,7 @@ describe('#database', () => {
       };
       const instance = await getDb<Dao>(
         createSchema(`jest-database-${test}`),
-        api as any
+        api as unknown as CrudApi<Dao>
       );
 
       try {
@@ -567,7 +570,7 @@ describe('#database', () => {
       };
       const instance = await getDb<Dao>(
         createSchema(`jest-database-${test}`),
-        api as any,
+        api as unknown as CrudApi<Dao>,
         [existing]
       );
       const updated = {
@@ -590,7 +593,7 @@ describe('#database', () => {
       };
       const instance = await getDb<Dao>(
         createSchema(`jest-database-${test}`),
-        api as any,
+        api as unknown as CrudApi<Dao>,
         [existing]
       );
       const updated = {
@@ -637,7 +640,7 @@ describe('#database', () => {
       jest.spyOn(api, 'isOnline');
       const instance = await getDb<Dao>(
         createSchema(`jest-database-${test}`),
-        api as any
+        api as unknown as CrudApi<Dao>
       );
       await instance.sync();
       expect(api.isOnline).toHaveBeenCalledTimes(1);
@@ -800,5 +803,12 @@ function prepApiWithNItems<T>(
   const items = new Array(numberOfItems)
     .fill(1)
     .map((_, index) => factory(`${testName}-${index + 1}`));
-  return Promise.all(items.map(item => api.create(item))).then(() => {});
+  return Promise.all(items.map(item => api.create(item))).then();
+}
+
+function isError(e: unknown): e is Error {
+  if (typeof e !== 'object') {
+    return false;
+  }
+  return e != null && 'message' in e;
 }

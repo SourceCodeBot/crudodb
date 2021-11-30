@@ -30,22 +30,20 @@ export class Database<T> {
       req.onerror = () => reject();
     });
 
-    const actions = localItems.map(
-      (item: F): Promise<unknown> => {
-        switch (item.flag) {
-          case 'D':
-            return this.getId(item, (id: T[keyof T]) =>
-              this.deleteRemote(id, item)
-            );
-          case 'C':
-            return this.createRemote(item);
-          case 'U':
-            return this.updateRemote(item);
-          default:
-            return Promise.resolve();
-        }
+    const actions = localItems.map((item: F): Promise<unknown> => {
+      switch (item.flag) {
+        case 'D':
+          return this.getId(item, (id: T[keyof T]) =>
+            this.deleteRemote(id, item)
+          );
+        case 'C':
+          return this.createRemote(item);
+        case 'U':
+          return this.updateRemote(item);
+        default:
+          return Promise.resolve();
       }
-    );
+    });
     await Promise.all(actions);
     if (this.api && isOnline) {
       try {
@@ -60,10 +58,10 @@ export class Database<T> {
   public get(id: T[keyof T]): Promise<T | undefined> {
     return new Promise((resolve, reject) => {
       this.prepareTransaction();
-      const request = this.objectStore.get((id as unknown) as IndexedKey);
+      const request = this.objectStore.get(id as unknown as IndexedKey);
       request.onerror = err => reject(err);
       request.onsuccess = async () => {
-        const {result} = request;
+        const { result } = request;
         if (!result && this.api) {
           const isOnline = isOnlineSupport(this.api)
             ? await this.api.isOnline()
@@ -88,7 +86,7 @@ export class Database<T> {
       this.prepareTransaction();
       const request = this.objectStore.getAll();
       request.onsuccess = async () => {
-        const {result} = request;
+        const { result } = request;
         if (result?.length < 1 && this.api) {
           const isOnline = isOnlineSupport(this.api)
             ? await this.api.isOnline()
@@ -208,10 +206,7 @@ export class Database<T> {
     return item;
   }
 
-  private async updateLocal(
-    item: T,
-    addFlag = true
-  ): Promise<T | undefined> {
+  private async updateLocal(item: T, addFlag = true): Promise<T | undefined> {
     const entity = assertNotNull(await this.getId(item, id => this.get(id)));
     const localItem: T & { flag: string } = {
       ...schemaConform(item, this.schema.indices),
@@ -258,12 +253,12 @@ export class Database<T> {
     this.prepareTransaction();
     if (!addFlag) {
       await handleRequest(
-        this.objectStore.delete((id as unknown) as IndexedKey),
+        this.objectStore.delete(id as unknown as IndexedKey),
         item
       );
       return;
     }
-    const entity = await this.get((id as unknown) as T[keyof T]);
+    const entity = await this.get(id as unknown as T[keyof T]);
     assertNotNull(entity);
     await handleRequest(
       this.objectStore.put({
@@ -364,7 +359,7 @@ function getValue<T, K extends keyof T>(obj: T, key: K): T[K] {
 }
 
 function renewStore(objectStore: IDBObjectStore): IDBObjectStore {
-  const {db} = objectStore.transaction;
+  const { db } = objectStore.transaction;
   return db
     .transaction(objectStore.name, 'readwrite')
     .objectStore(objectStore.name);
@@ -380,5 +375,5 @@ function schemaConform<T, K extends keyof T>(
 ): T {
   const keys: K[] = indices.map(({ name }) => name as K);
   const entries: [K, T[K]][] = keys.map(key => [key, item[key as K]]);
-  return (Object.fromEntries(entries) as unknown) as T;
+  return Object.fromEntries(entries) as unknown as T;
 }

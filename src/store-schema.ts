@@ -4,7 +4,6 @@ export type IndexedKey =
   | Date
   | ArrayBufferView
   | ArrayBuffer
-  | IDBArrayKey
   | IDBKeyRange;
 
 /**
