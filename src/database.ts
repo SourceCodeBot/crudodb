@@ -1,6 +1,6 @@
-import { IndexedKey, StoreIndex, StoreSchema } from './store-schema';
-import { isDeleted, isOnlineSupport } from './utils';
 import { CrudApi } from './crud-api';
+import { IndexedKey, StoreIndex, StoreSchema } from './store-schema';
+import { assertNotNull, isDeleted, isOnlineSupport } from './utils';
 
 type WithFlag<T> = T & { flag?: string };
 
@@ -22,28 +22,28 @@ export class Database<T> {
     if (!isOnline) {
       return;
     }
-    const localItems = new Promise<F[]>((resolve, reject) => {
+
+    const localItems = await new Promise<F[]>((resolve, reject) => {
       this.prepareTransaction();
       const req = this.objectStore.index('flag').getAll();
       req.onsuccess = () => resolve(req.result as F[]);
       req.onerror = () => reject();
     });
-    const actions = (await localItems).map(
-      (item: F): Promise<unknown> => {
-        switch (item.flag) {
-          case 'D':
-            return this.getId(item, (id: T[keyof T]) =>
-              this.deleteRemote(id, item)
-            );
-          case 'C':
-            return this.createRemote(item);
-          case 'U':
-            return this.updateRemote(item);
-          default:
-            return Promise.resolve();
-        }
+
+    const actions = localItems.map((item: F): Promise<unknown> => {
+      switch (item.flag) {
+        case 'D':
+          return this.getId(item, (id: T[keyof T]) =>
+            this.deleteRemote(id, item)
+          );
+        case 'C':
+          return this.createRemote(item);
+        case 'U':
+          return this.updateRemote(item);
+        default:
+          return Promise.resolve();
       }
-    );
+    });
     await Promise.all(actions);
     if (this.api && isOnline) {
       try {
@@ -58,10 +58,10 @@ export class Database<T> {
   public get(id: T[keyof T]): Promise<T | undefined> {
     return new Promise((resolve, reject) => {
       this.prepareTransaction();
-      const request = this.objectStore.get((id as unknown) as IndexedKey);
+      const request = this.objectStore.get(id as unknown as IndexedKey);
       request.onerror = err => reject(err);
       request.onsuccess = async () => {
-        const result = request.result;
+        const { result } = request;
         if (!result && this.api) {
           const isOnline = isOnlineSupport(this.api)
             ? await this.api.isOnline()
@@ -86,7 +86,7 @@ export class Database<T> {
       this.prepareTransaction();
       const request = this.objectStore.getAll();
       request.onsuccess = async () => {
-        const result = request.result;
+        const { result } = request;
         if (result?.length < 1 && this.api) {
           const isOnline = isOnlineSupport(this.api)
             ? await this.api.isOnline()
@@ -110,32 +110,28 @@ export class Database<T> {
    * create entity in storage
    * @param item
    */
-  public create(item: T): Promise<T | undefined> {
-    return this.createLocal(item)
-      .catch(() => undefined)
-      .then(entity => entity && this.createRemote(entity).catch(() => entity));
+  public async create(item: T): Promise<T> {
+    const entity = assertNotNull(await this.createLocal(item));
+    return assertNotNull(await this.createRemote(entity));
   }
 
   /**
    * update existing entity in storage
    * @param item
    */
-  public update(item: T): Promise<T | undefined> {
-    return this.updateLocal(item)
-      .catch(() => undefined)
-      .then(entity => entity && this.updateRemote(entity).catch(() => entity));
+  public async update(item: T): Promise<T> {
+    const entity = assertNotNull(await this.updateLocal(item));
+    return assertNotNull(await this.updateRemote(entity));
   }
 
   /**
    * delete given entity in local and optional remote storage
    * @param item
    */
-  public delete(item: T): Promise<boolean> {
-    return this.getId(item, (id: T[keyof T]) =>
-      this.deleteLocal(id, item).then(
-        result => result && this.deleteRemote(id, item)
-      )
-    ).catch(() => false);
+  public async delete(item: T): Promise<void> {
+    await this.getId(item, (id: T[keyof T]) =>
+      this.deleteLocal(id, item).then(_ => this.deleteRemote(id, item))
+    );
   }
 
   /*****************************
@@ -179,19 +175,18 @@ export class Database<T> {
     );
   }
 
-  private async createLocal(
-    item: T,
-    addFlag: boolean = true
-  ): Promise<T | undefined> {
+  private async createLocal(item: T, addFlag = true): Promise<T> {
     const localItem: T & { flag: string } = {
       ...schemaConform(item, this.schema.indices),
       flag: addFlag ? 'C' : ''
     };
     this.prepareTransaction();
-    return handleRequest(this.objectStore.add(localItem), localItem);
+    return assertNotNull(
+      await handleRequest(this.objectStore.add(localItem), localItem)
+    );
   }
 
-  private async createRemote(item: T): Promise<T | undefined> {
+  private async createRemote(item: T): Promise<T> {
     if (!this.api) {
       return item;
     }
@@ -199,44 +194,34 @@ export class Database<T> {
       ? await this.api.isOnline()
       : undefined;
     if (isOnline === undefined || isOnline) {
-      return await this.api
-        .create(schemaConform(item, this.schema.indices))
-        .then(async (result: T | undefined) => {
-          const deleted = await this.getId(item, (id: T[keyof T]) =>
-            this.deleteLocal(id, item, false)
-          ).catch(() => false);
-          return deleted && result
-            ? this.createLocal(result, false)
-            : undefined;
-        })
-        .catch(err => {
-          console.error(
-            `can't call create of api ${buildEntityIdent(this.schema)}`,
-            err
-          );
-          return item;
-        });
+      const result = await this.api.create(
+        schemaConform(item, this.schema.indices)
+      );
+      await this.getId(item, (id: T[keyof T]) =>
+        this.deleteLocal(id, item, false)
+      );
+      const entity = await this.createLocal(assertNotNull(result), false);
+      return assertNotNull(entity);
     }
     return item;
   }
 
-  private async updateLocal(
-    item: T,
-    addFlag: boolean = true
-  ): Promise<T | undefined> {
-    const entity = await this.getId(item, id => this.get(id));
+  private async updateLocal(item: T, addFlag = true): Promise<T | undefined> {
+    const entity = assertNotNull(await this.getId(item, id => this.get(id)));
     const localItem: T & { flag: string } = {
       ...schemaConform(item, this.schema.indices),
       flag: addFlag ? evaluateUpdateFlag(entity) : ''
     };
     this.prepareTransaction();
-    return (
-      entity &&
-      (await handleRequest(this.objectStore.put(localItem), localItem))
+    assertNotNull(entity);
+    const fromStorage = await handleRequest(
+      this.objectStore.put(localItem),
+      localItem
     );
+    return assertNotNull(fromStorage);
   }
 
-  private async updateRemote(item: T): Promise<T | undefined> {
+  private async updateRemote(item: T): Promise<T> {
     if (!this.api) {
       return item;
     }
@@ -244,19 +229,18 @@ export class Database<T> {
       ? await this.api.isOnline()
       : undefined;
     if (isOnline === undefined || isOnline) {
-      return this.api
-        .update(item)
-        .then(
-          async (result: T | undefined) =>
-            result && (await this.updateLocal(result, false))
-        )
-        .catch(err => {
-          console.error(
-            `can't call update of api ${buildEntityIdent(this.schema)}`,
-            err
-          );
-          return item;
-        });
+      try {
+        const result = await this.api.update(
+          schemaConform(item, this.schema.indices)
+        );
+        const entity = await this.updateLocal(assertNotNull(result), false);
+        return assertNotNull(entity);
+      } catch (err) {
+        console.error(
+          `can't call update of api ${buildEntityIdent(this.schema)}`,
+          err
+        );
+      }
     }
     return item;
   }
@@ -264,30 +248,25 @@ export class Database<T> {
   private async deleteLocal(
     id: T[keyof T],
     item: T,
-    addFlag: boolean = true
-  ): Promise<boolean> {
+    addFlag = true
+  ): Promise<void> {
     this.prepareTransaction();
     if (!addFlag) {
-      return handleRequest(
-        this.objectStore.delete((id as unknown) as IndexedKey),
+      await handleRequest(
+        this.objectStore.delete(id as unknown as IndexedKey),
         item
-      )
-        .then(() => true)
-        .catch(() => false);
+      );
+      return;
     }
-    return this.get((id as unknown) as T[keyof T])
-      .then(
-        entity =>
-          entity &&
-          handleRequest(
-            this.objectStore.put({
-              ...entity,
-              flag: 'D'
-            }),
-            true
-          )
-      )
-      .then(res => (res === undefined ? false : res));
+    const entity = await this.get(id as unknown as T[keyof T]);
+    assertNotNull(entity);
+    await handleRequest(
+      this.objectStore.put({
+        ...entity,
+        flag: 'D'
+      }),
+      true
+    );
   }
 
   private async deleteRemote(id: T[keyof T], item: T): Promise<boolean> {
@@ -298,19 +277,16 @@ export class Database<T> {
       ? await this.api.isOnline()
       : undefined;
     if (isOnline === undefined || isOnline) {
-      return this.api
-        .delete(item)
-        .then(
-          async (deleted: boolean) =>
-            deleted && (await this.deleteLocal(id, item, false))
-        )
-        .catch(err => {
-          console.error(
-            `can't call delete of api ${buildEntityIdent(this.schema)}`,
-            err
-          );
-          return false;
-        });
+      try {
+        await this.api.delete(schemaConform(item, this.schema.indices));
+        await this.deleteLocal(id, item, false);
+      } catch (err) {
+        console.error(
+          `can't call delete of api ${buildEntityIdent(this.schema)}`,
+          err
+        );
+        return false;
+      }
     }
     return true;
   }
@@ -320,7 +296,7 @@ export class Database<T> {
     callback: (id: T[keyof T]) => Promise<S>
   ): Promise<S> {
     const { keyPath = 'id' } = this.schema;
-    if (!(item as any).hasOwnProperty(keyPath)) {
+    if (!item[keyPath as keyof T]) {
       return Promise.reject();
     }
     return callback(getValue(item, keyPath as keyof T));
@@ -375,7 +351,7 @@ function extractIdsList<T, K extends keyof T>(list: T[], key: string): T[K][] {
 }
 
 function logInfo<T>(item: T, error: unknown): void {
-  console.debug(`error while sync`, { item, error });
+  console.info(`error while sync`, { item, error });
 }
 
 function getValue<T, K extends keyof T>(obj: T, key: K): T[K] {
@@ -383,13 +359,13 @@ function getValue<T, K extends keyof T>(obj: T, key: K): T[K] {
 }
 
 function renewStore(objectStore: IDBObjectStore): IDBObjectStore {
-  const db = objectStore.transaction.db;
+  const { db } = objectStore.transaction;
   return db
     .transaction(objectStore.name, 'readwrite')
     .objectStore(objectStore.name);
 }
 
-function evaluateUpdateFlag(entity?: any): string {
+function evaluateUpdateFlag(entity?: unknown & { flag?: string }): string {
   return entity && entity.flag === 'C' ? 'C' : 'U';
 }
 
@@ -399,5 +375,5 @@ function schemaConform<T, K extends keyof T>(
 ): T {
   const keys: K[] = indices.map(({ name }) => name as K);
   const entries: [K, T[K]][] = keys.map(key => [key, item[key as K]]);
-  return (Object.fromEntries(entries) as unknown) as T;
+  return Object.fromEntries(entries) as unknown as T;
 }

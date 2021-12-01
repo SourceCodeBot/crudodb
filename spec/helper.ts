@@ -31,3 +31,11 @@ export const BASE_SCHEMA: StoreSchema = {
   dbName: 'CHANGE',
   dbVersion: 1
 };
+
+export function mockConsole(): void {
+  console.debug = jest.fn();
+  console.error = jest.fn();
+  console.info = jest.fn();
+  console.time = jest.fn();
+  console.timeEnd = jest.fn();
+}
